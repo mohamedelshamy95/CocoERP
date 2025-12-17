@@ -35,6 +35,59 @@ const PURCHASE_HEADERS = [
  * - Does NOT override user-entered values
  * - Supports small multi-row pastes
  * ============================================================= */
+function purchases_maybeAutoRepairFormulas_(sh, map) {
+  try {
+    if (!sh || sh.getLastRow() < 2) return;
+
+    // Check a few ARRAYFORMULA anchors that must exist in row 2
+    const requiredHeaders = [
+      'Order Total (EGP)',
+      'Landed Cost (EGP)',
+      'Unit Landed Cost (EGP)',
+      'Net Unit Price (EGP)',
+      'Batch Code'
+    ];
+
+    let missing = false;
+    for (let i = 0; i < requiredHeaders.length; i++) {
+      const h = requiredHeaders[i];
+      const c = map[h];
+      if (!c) continue; // schema issue handled elsewhere
+      const f = sh.getRange(2, c).getFormula();
+      if (!f || String(f).trim() === '') {
+        missing = true;
+        break;
+      }
+    }
+    if (!missing) return;
+
+    // Throttle: do not run more than once per 60s
+    const props = PropertiesService.getDocumentProperties();
+    const key = 'CocoERP_PurchasesFormulasAutoRepair_LastRun';
+    const last = Number(props.getProperty(key) || 0);
+    const now = Date.now();
+    if (now - last < 60 * 1000) return;
+
+    withLock_('PurchasesAutoRepairFormulas', function () {
+      const props2 = PropertiesService.getDocumentProperties();
+      const last2 = Number(props2.getProperty(key) || 0);
+      const now2 = Date.now();
+      if (now2 - last2 < 60 * 1000) return;
+
+      props2.setProperty(key, String(now2));
+
+      if (typeof purchases_installFormulasCore_ === 'function') {
+        purchases_installFormulasCore_();
+      } else if (typeof installPurchasesFormulas === 'function') {
+        installPurchasesFormulas();
+      }
+    });
+
+  } catch (err) {
+    try { logError_('purchases_maybeAutoRepairFormulas_', err); } catch (e) {}
+  }
+}
+
 function purchasesOnEditDefaults_(e) {
   try {
     if (!e || !e.range) return;
