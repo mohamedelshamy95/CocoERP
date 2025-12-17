@@ -514,9 +514,8 @@ function updateAllShipmentsStatusAndTotals() {
  */
 function syncPurchasesToShipmentsCnUae() {
   try {
-    const purchSh       = getSheet_(APP.SHEETS.PURCHASES);
-    const shipSheetName = APP.SHEETS.SHIP_CN_UAE || 'Shipments_CN_UAE';
-    const shipSh        = getSheet_(shipSheetName);
+    const purchSh = getSheet_(APP.SHEETS.PURCHASES);
+    const shipSh  = getSheet_(APP.SHEETS.SHIP_CN_UAE);
 
     const pMap = getHeaderMap_(purchSh);
     const sMap = getHeaderMap_(shipSh);
@@ -527,21 +526,16 @@ function syncPurchasesToShipmentsCnUae() {
       return;
     }
 
-    const purchData = purchSh
-      .getRange(2, 1, lastPurRow - 1, purchSh.getLastColumn())
-      .getValues();
-
     // Purchases columns (robust)
     const colOrderId   = pMap[APP.COLS.PURCHASES.ORDER_ID]   || pMap['Order ID'];
     const colOrderDate = pMap[APP.COLS.PURCHASES.ORDER_DATE] || pMap['Order Date'];
     const colPlatform  = pMap[APP.COLS.PURCHASES.PLATFORM]   || pMap['Platform'];
     const colSeller    = pMap[APP.COLS.PURCHASES.SELLER]     || pMap['Seller Name'];
     const colSku       = pMap[APP.COLS.PURCHASES.SKU]        || pMap['SKU'];
-
     const colProduct   = pMap[APP.COLS.PURCHASES.PRODUCT_NAME] || pMap[APP.COLS.PURCHASES.PRODUCT] || pMap['Product Name'];
     const colVariant   = pMap[APP.COLS.PURCHASES.VARIANT]      || pMap['Variant / Color'];
-
     const colQty       = pMap[APP.COLS.PURCHASES.QTY]        || pMap['Qty'];
+    const colLineId    = pMap[APP.COLS.PURCHASES.LINE_ID]    || pMap['Line ID'];
 
     // Invoice indicators (to decide "ready to ship")
     const colInvoiceLink   = pMap['Invoice Link'];
@@ -551,17 +545,32 @@ function syncPurchasesToShipmentsCnUae() {
     if (!colOrderId || !colSku || !colQty) {
       throw new Error('Missing required Purchases columns (Order ID / SKU / Qty).');
     }
+    if (!colLineId) {
+      throw new Error('Missing Purchases column "Line ID". Run Purchases layout/repair first.');
+    }
+
+    // Ensure missing Line IDs are generated (idempotent)
+    try {
+      if (typeof purchases_ensureLineIds_ === 'function') {
+        purchases_ensureLineIds_(purchSh, pMap, 2, lastPurRow - 1);
+      }
+    } catch (e) {}
+
+    const purchData = purchSh
+      .getRange(2, 1, lastPurRow - 1, purchSh.getLastColumn())
+      .getValues();
 
     // Shipments columns
-    const shipColId      = sMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || sMap['Shipment ID'];
-    const shipColOrderId = sMap['Order ID (Batch)'] || sMap['Order ID'];
-    const shipColSku     = sMap['SKU'];
-    const shipColVariant = sMap['Variant / Color'] || sMap[APP.COLS.PURCHASES.VARIANT];
-    const shipColQty     = sMap[APP.COLS.PURCHASES.QTY] || sMap['Qty'];
-    const shipColProd    = sMap['Product Name'];
+    const shipColId        = sMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID]       || sMap['Shipment ID'];
+    const shipColOrderId   = sMap[APP.COLS.SHIP_CN_UAE.ORDER_BATCH]       || sMap['Order ID (Batch)'] || sMap['Order ID'];
+    const shipColLineId    = sMap[APP.COLS.SHIP_CN_UAE.PURCHASE_LINE_ID]  || sMap['Purchases Line ID'];
+    const shipColSku       = sMap[APP.COLS.SHIP_CN_UAE.SKU]               || sMap['SKU'];
+    const shipColVariant   = sMap[APP.COLS.SHIP_CN_UAE.VARIANT]           || sMap['Variant / Color'] || sMap[APP.COLS.PURCHASES.VARIANT];
+    const shipColQty       = sMap[APP.COLS.SHIP_CN_UAE.QTY]               || sMap[APP.COLS.PURCHASES.QTY] || sMap['Qty'];
+    const shipColProd      = sMap[APP.COLS.SHIP_CN_UAE.PRODUCT_NAME]      || sMap['Product Name'];
 
-    if (!shipColOrderId || !shipColSku || !shipColQty) {
-      throw new Error('Missing required Shipments_CN_UAE columns (Order ID (Batch) / SKU / Qty).');
+    if (!shipColOrderId || !shipColSku || !shipColQty || !shipColLineId) {
+      throw new Error('Missing required Shipments_CN_UAE columns (Order ID (Batch) / Purchases Line ID / SKU / Qty). Run Logistics → Setup Shipments Layouts.');
     }
 
     // Existing Shipments map + detect Shipment ID max sequence
@@ -570,18 +579,17 @@ function syncPurchasesToShipmentsCnUae() {
       ? shipSh.getRange(2, 1, lastShipRow - 1, shipSh.getLastColumn()).getValues()
       : [];
 
-    /** @type {Record<string, {row:number, shipId:string}>} */
-    const existingByKey = {}; // key: OrderID||SKU||Variant -> { row, shipId }
-    /** @type {Record<string, string>} */
+    /** @type {Object<string, {row:number, shipId:string}>} */
+    const existingByLineId = {}; // key: Purchases Line ID -> { row, shipId }
+    /** @type {Object<string, string>} */
     const orderToShipmentId = {}; // OrderID -> ShipmentID
     let maxSeq = 0;
 
-    if (existingRows.length && shipColOrderId && shipColSku) {
+    if (existingRows.length) {
       existingRows.forEach(function (row, i) {
         const sheetRow = i + 2;
         const orderId = row[shipColOrderId - 1];
-        const sku     = (row[shipColSku - 1] || '').toString().trim();
-        const variant = shipColVariant ? String(row[shipColVariant - 1] || '').trim() : '';
+        const lineId  = String(row[shipColLineId - 1] || '').trim();
         const shipId  = shipColId ? String(row[shipColId - 1] || '').trim() : '';
 
         if (orderId && shipId) orderToShipmentId[String(orderId)] = shipId;
@@ -594,21 +602,29 @@ function syncPurchasesToShipmentsCnUae() {
           }
         }
 
-        if (orderId && sku) {
-          const key = String(orderId) + '||' + sku + '||' + variant;
-          if (!existingByKey[key]) existingByKey[key] = { row: sheetRow, shipId: shipId };
+        if (lineId && !existingByLineId[lineId]) {
+          existingByLineId[lineId] = { row: sheetRow, shipId: shipId };
         }
       });
     }
 
-    // Aggregate Purchases Qty by key (OrderID||SKU||Variant)
-    /** @type {Record<string, any>} */
-    const agg = {};
+    const shipLastCol = shipSh.getLastColumn();
+    const shipHeaders = shipSh.getRange(1, 1, 1, shipLastCol).getValues()[0];
+
+    const newRows = [];
+    const qtyUpdates = [];
+    const fillUpdates = [];
+
+    // Line-level sync (NO aggregation; no de-dup by OrderID+SKU)
     purchData.forEach(function (r) {
-      const orderId = colOrderId ? r[colOrderId - 1] : '';
-      const sku     = colSku ? (r[colSku - 1] || '').toString().trim() : '';
+      const orderIdRaw = colOrderId ? r[colOrderId - 1] : '';
+      const orderId = String(orderIdRaw || '').trim();
+      const sku     = colSku ? String(r[colSku - 1] || '').trim() : '';
       const qty     = colQty ? Number(r[colQty - 1] || 0) : 0;
+      const lineId  = colLineId ? String(r[colLineId - 1] || '').trim() : '';
+
       if (!orderId || !sku || !qty) return;
+      if (!lineId) return;
 
       // Only sync if invoice exists (any of these signals)
       const hasInvoice =
@@ -619,47 +635,6 @@ function syncPurchasesToShipmentsCnUae() {
       if (!hasInvoice) return;
 
       const variant = colVariant ? String(r[colVariant - 1] || '').trim() : '';
-      const key = String(orderId) + '||' + sku + '||' + variant;
-
-      if (!agg[key]) {
-        agg[key] = {
-          orderId: String(orderId),
-          sku: sku,
-          variant: variant,
-          qty: 0,
-          orderDate: colOrderDate ? r[colOrderDate - 1] : null,
-          platform:  colPlatform ? r[colPlatform - 1] : '',
-          seller:    colSeller ? r[colSeller - 1] : '',
-          product:   colProduct ? r[colProduct - 1] : ''
-        };
-      }
-      agg[key].qty += qty;
-      // Keep product/variant if we didn't have it yet
-      if (!agg[key].product && colProduct) agg[key].product = r[colProduct - 1] || '';
-    });
-
-    const keys = Object.keys(agg);
-    if (!keys.length) {
-      safeAlert_('No Purchases rows eligible for CN→UAE sync (invoice signals missing).');
-      return;
-    }
-
-    const shipLastCol = shipSh.getLastColumn();
-    const shipHeaders = shipSh.getRange(1, 1, 1, shipLastCol).getValues()[0];
-
-    /** inserts */
-    const newRows = [];
-    /** qty updates: {row:number, qty:number} */
-    const qtyUpdates = [];
-    /** optional product fills: {row:number, product:string, variant:string} */
-    const fillUpdates = [];
-
-    keys.forEach(function (k) {
-      const it = agg[k];
-      const orderId = it.orderId;
-      const sku = it.sku;
-      const variant = it.variant || '';
-      const qty = Number(it.qty || 0);
 
       // Shipment ID per Order ID
       let shipmentId = orderToShipmentId[orderId];
@@ -669,36 +644,35 @@ function syncPurchasesToShipmentsCnUae() {
         orderToShipmentId[orderId] = shipmentId;
       }
 
-      const existing = existingByKey[orderId + '||' + sku + '||' + variant];
+      const existing = existingByLineId[lineId];
       if (existing && existing.row) {
-        // Upsert qty
         qtyUpdates.push({ row: existing.row, qty: qty });
 
-        // Fill product/variant if missing in sheet
         if (shipColProd || shipColVariant) {
-          fillUpdates.push({ row: existing.row, product: String(it.product || ''), variant: String(variant || '') });
+          const prod = colProduct ? String(r[colProduct - 1] || '').trim() : '';
+          fillUpdates.push({ row: existing.row, product: prod, variant: String(variant || '') });
         }
         return;
       }
 
-      /** @type {Record<string, any>} */
+      /** @type {Object<string, any>} */
       const rowObj = {};
 
-      // Header-based payload (matches Logistics headers)
       rowObj['Shipment ID']          = shipmentId;
-      rowObj['Supplier / Factory']   = it.seller || '';
-      rowObj['Forwarder']            = it.platform || '';
+      rowObj['Supplier / Factory']   = colSeller ? (r[colSeller - 1] || '') : '';
+      rowObj['Forwarder']            = colPlatform ? (r[colPlatform - 1] || '') : '';
       rowObj['Tracking / Container'] = '';
+      rowObj['Purchases Line ID']    = lineId;
+
       rowObj['Order ID (Batch)']     = orderId;
 
-      const orderDate = it.orderDate;
+      const orderDate = colOrderDate ? r[colOrderDate - 1] : null;
       rowObj['Ship Date']            = (orderDate instanceof Date) ? orderDate : new Date();
-
       rowObj['ETA']                  = '';
       rowObj['Actual Arrival']       = '';
 
       rowObj['SKU']             = sku;
-      rowObj['Product Name']    = it.product || '';
+      rowObj['Product Name']    = colProduct ? (r[colProduct - 1] || '') : '';
       rowObj['Variant / Color'] = variant || '';
       rowObj['Qty']             = qty;
 
@@ -708,7 +682,7 @@ function syncPurchasesToShipmentsCnUae() {
       rowObj['Other Fees (AED)']  = '';
       rowObj['Total Cost (AED)']  = '';
 
-      rowObj['Notes'] = 'Auto (sum) from Purchases';
+      rowObj['Notes'] = 'Auto (line-level) from Purchases';
 
       const outRow = shipHeaders.map(function (h) {
         return (rowObj[h] !== undefined) ? rowObj[h] : '';
@@ -716,16 +690,19 @@ function syncPurchasesToShipmentsCnUae() {
       newRows.push(outRow);
     });
 
-    // Apply qty updates in batches (contiguous runs) to avoid per-row setValue loops
+    if (!newRows.length && !qtyUpdates.length) {
+      safeAlert_('No Shipments_CN_UAE changes detected.');
+      return;
+    }
+
+    // Apply qty updates in batches (contiguous runs)
     let updatedQtyCount = 0;
     if (qtyUpdates.length) {
       qtyUpdates.sort(function (a, b) { return a.row - b.row; });
 
-      // Build a map row -> qty
       const rowToQty = {};
-      qtyUpdates.forEach(u => { rowToQty[u.row] = u.qty; });
+      qtyUpdates.forEach(function (u) { rowToQty[u.row] = u.qty; });
 
-      // Group contiguous ranges
       let i = 0;
       while (i < qtyUpdates.length) {
         const startRow = qtyUpdates[i].row;
@@ -744,10 +721,9 @@ function syncPurchasesToShipmentsCnUae() {
         i++;
       }
 
-      // Optional: fill Product/Variant if blank (best-effort; lightweight)
+      // Optional: fill Product/Variant if blank (best-effort)
       try {
         if (fillUpdates.length) {
-          // read current values for affected rows in one pass if possible (since rows are scattered, we do minimal per-row)
           fillUpdates.forEach(function (u) {
             const r = u.row;
             if (shipColProd) {
@@ -770,7 +746,6 @@ function syncPurchasesToShipmentsCnUae() {
     }
 
     if (newRows.length || updatedQtyCount) {
-      // After write, rebuild CN→UAE status + validation (safe)
       try { rebuildShipmentsCnUaeStatus_(); } catch (e) {}
       try { setupShipmentsCnUaeStatusValidation_(); } catch (e) {}
     }
@@ -786,8 +761,6 @@ function syncPurchasesToShipmentsCnUae() {
     throw e;
   }
 }
-
-
 
 /* ===================================================================
  * Inventory integration (Inventory_UAE ↔ Shipments_UAE_EG)
