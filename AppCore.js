@@ -94,6 +94,7 @@ const APP = {
       VARIANT_CLR: 'Variant / Color',    // legacy alias
 
       BATCH_CODE:  'Batch Code',
+      LINE_ID:     'Line ID', 
       QTY:         'Qty',
       TOTAL_ORIG:  'Total Order (Orig)',
       TOTAL_EGP:   'Order Total (EGP)',
@@ -135,6 +136,7 @@ const APP = {
       QC_RESULT:    'QC Result',
       QC_DATE:      'QC Date',
       WAREHOUSE:    'Warehouse (UAE)',
+      PURCHASE_LINE_ID: 'Purchases Line ID'
       NOTES:        'Notes'
     },
 
@@ -157,6 +159,7 @@ const APP = {
       FREIGHT_AED: 'Freight (AED)',
       OTHER_AED:   'Other Fees (AED)',
       TOTAL_AED:   'Total Cost (AED)',
+      PURCHASE_LINE_ID: 'Purchases Line ID'
       NOTES:       'Notes'
     },
 
