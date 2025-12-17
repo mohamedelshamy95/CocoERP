@@ -1243,7 +1243,7 @@ function qc_generateFromPurchasesPrompt() {
  *   Qty Missing = Qty Ordered - Qty Received
  *   Qty OK      = Qty Received - Qty Defective
  */
-function qc_generateFromPurchases_(optOrderId) {
+function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
   try {
     const purchSh = getSheet_(APP.SHEETS.PURCHASES);
     const qcSh    = getSheet_(APP.SHEETS.QC_UAE);
@@ -1393,6 +1393,22 @@ function qc_generateFromPurchases_(optOrderId) {
 
     const updates = [];
     const newRowsFull = [];
+    const filterSet = (function () {
+  if (Array.isArray(optOrderIdOrOrderIds)) {
+    const set = {};
+    (optOrderIdOrOrderIds || []).forEach(function (x) {
+      const s = String(x || '').trim();
+      if (s) set[s] = true;
+    });
+    return Object.keys(set).length ? set : null;
+  }
+  const s = String(optOrderIdOrOrderIds || '').trim();
+  if (!s) return null;
+  const set = {};
+  set[s] = true;
+  return set;
+})();
+
 
     const filterOrderId = (optOrderId || '').toString().trim();
     const seenInRun = {};
@@ -1400,7 +1416,7 @@ function qc_generateFromPurchases_(optOrderId) {
     purchData.forEach(function (r) {
       const orderId = String(r[colOrderId - 1] || '').trim();
       if (!orderId) return;
-      if (filterOrderId && orderId !== filterOrderId) return;
+      if (filterSet && !filterSet[orderId]) return;
 
       const sku = String(r[colSku - 1] || '').trim();
       const qty = Number(r[colQty - 1] || 0);
@@ -1559,7 +1575,7 @@ function qc_generateFromPurchases_(optOrderId) {
     );
 
   } catch (e) {
-    logError_('qc_generateFromPurchases_', e, { optOrderId: optOrderId });
+    logError_('qc_generateFromPurchases_', e, { optOrderIdOrOrderIds: optOrderIdOrOrderIds });
     throw e;
   }
 }
