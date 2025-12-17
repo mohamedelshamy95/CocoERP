@@ -26,7 +26,8 @@ const PURCHASE_HEADERS = [
   'Landed Cost (EGP)','Unit Landed Cost (EGP)','Notes',
 
   'Line Gross (Orig)','Discount Alloc (Orig)','Shipping Alloc (Orig)',
-  'Line Net (Orig)','Net Unit Price (Orig)','Net Unit Price (EGP)'
+  'Line Net (Orig)','Net Unit Price (Orig)','Net Unit Price (EGP)',
+'Line ID'
 ];
 
 
