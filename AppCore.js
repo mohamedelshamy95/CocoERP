@@ -574,8 +574,8 @@ function ensureSettingsSheet_() {
     addIfMissing_(APP.SETTINGS_KEYS.FX_AED_EGP, 0);
     // Optional: keep for future if you ever capture USD rows; safe even if unused.
     if (APP.SETTINGS_KEYS.FX_USD_EGP) addIfMissing_(APP.SETTINGS_KEYS.FX_USD_EGP, 0);
-    addIfMissing_(APP.SETTINGS_KEYS.DEFAULT_SHIP_UAE_EG, 0);
-    addIfMissing_(APP.SETTINGS_KEYS.DEFAULT_CUSTOMS_PCT, 0.20);
+    addIfMissing_(APP.SETTINGS_KEYS.SHIP_UAE_EG_ORDER, 0);
+    addIfMissing_(APP.SETTINGS_KEYS.CUSTOMS_PCT, 0.20);
 
     if (toAppend.length) {
       sh.getRange(sh.getLastRow() + 1, keyCol, toAppend.length, 2).setValues(toAppend);
