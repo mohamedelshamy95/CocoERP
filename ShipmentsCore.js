@@ -1409,8 +1409,6 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
   return set;
 })();
 
-
-    const filterOrderId = (optOrderId || '').toString().trim();
     const seenInRun = {};
 
     purchData.forEach(function (r) {
