@@ -105,6 +105,7 @@ function purchasesOnEditDefaults_(e) {
     if (nr > 300 || nc > 25) return;
 
     const map = getHeaderMap_(sh, 1);
+    try { purchases_maybeAutoRepairFormulas_(sh, map); } catch (e) {}
 
     const H = (APP && APP.COLS && APP.COLS.PURCHASES) ? APP.COLS.PURCHASES : {};
     const cOrder   = map[H.ORDER_ID]    || map['Order ID'];
