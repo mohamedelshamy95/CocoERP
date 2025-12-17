@@ -89,6 +89,49 @@ function purchases_maybeAutoRepairFormulas_(sh, map) {
   }
 }
 
+function purchases_ensureLineIds_(sh, map, startRow, n) {
+  try {
+    if (!sh || !map || !startRow || !n) return 0;
+
+    const H = (APP && APP.COLS && APP.COLS.PURCHASES) ? APP.COLS.PURCHASES : {};
+    const cLineId = map[H.LINE_ID] || map['Line ID'];
+    const cOrder  = map[H.ORDER_ID] || map['Order ID'];
+    const cSku    = map[H.SKU] || map['SKU'];
+
+    if (!cLineId || !cOrder || !cSku) return 0;
+    if (n <= 0) return 0;
+
+    const orderIds = sh.getRange(startRow, cOrder,  n, 1).getValues();
+    const skus     = sh.getRange(startRow, cSku,    n, 1).getValues();
+    const lineIds  = sh.getRange(startRow, cLineId, n, 1).getValues();
+
+    let changed = false;
+    let count = 0;
+
+    for (let i = 0; i < n; i++) {
+      const cur = String(lineIds[i][0] || '').trim();
+      if (cur) continue;
+
+      const oid = String(orderIds[i][0] || '').trim();
+      const sku = String(skus[i][0] || '').trim();
+      if (!oid || !sku) continue;
+
+      // Stable unique ID (won't change if rows move/sort)
+      lineIds[i][0] = 'PL-' + Utilities.getUuid().slice(0, 8);
+      changed = true;
+      count++;
+    }
+
+    if (changed) {
+      sh.getRange(startRow, cLineId, n, 1).setValues(lineIds);
+    }
+    return count;
+  } catch (err) {
+    try { logError_('purchases_ensureLineIds_', err); } catch (e) {}
+    return 0;
+  }
+}
+
 function purchasesOnEditDefaults_(e) {
   try {
     if (!e || !e.range) return;
@@ -121,6 +164,7 @@ function purchasesOnEditDefaults_(e) {
     const endRow   = Math.min(sh.getLastRow(), row0 + nr - 1);
     const n = endRow - startRow + 1;
     if (n <= 0) return;
+    try { purchases_ensureLineIds_(sh, map, startRow, n); } catch (e) {}
 
     const orderIds = sh.getRange(startRow, cOrder, n, 1).getValues();
 
@@ -241,6 +285,11 @@ function setupPurchasesLayout() {
     } catch (e) {}
 
     const map = getHeaderMap_(sh, 1);
+    try {
+      const n = Math.max(0, sh.getLastRow() - 1);
+      if (n > 0) purchases_ensureLineIds_(sh, map, 2, n);
+    } catch (e) {}
+
     applyPurchasesFormats_(sh, map);
     applyPurchasesValidations_(sh, map);
 
