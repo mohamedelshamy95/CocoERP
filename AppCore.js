@@ -159,7 +159,7 @@ const APP = {
       FREIGHT_AED: 'Freight (AED)',
       OTHER_AED:   'Other Fees (AED)',
       TOTAL_AED:   'Total Cost (AED)',
-      PURCHASE_LINE_ID: 'Purchases Line ID'
+      PURCHASE_LINE_ID: 'Purchases Line ID',
       NOTES:       'Notes'
     },
 
