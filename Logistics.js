@@ -34,7 +34,7 @@ const SHIP_CN_UAE_HEADERS = [
   APP.COLS.SHIP_CN_UAE.SUPPLIER || 'Supplier / Factory',
   APP.COLS.SHIP_CN_UAE.FORWARDER || 'Forwarder',
   APP.COLS.SHIP_CN_UAE.TRACKING || 'Tracking / Container',
-  'Purchases Line ID'
+  'Purchases Line ID',
 
   'Order ID (Batch)',
 
