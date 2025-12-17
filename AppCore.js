@@ -957,10 +957,12 @@ function _dispatchOnEdit_(e) {
     try { coco_enqueueOrdersSyncFromPurchasesEdit_(e); } catch (err) {
       logError_('coco_enqueueOrdersSyncFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() });
     }
+    // Enqueue incremental sync tasks (time-trigger processes within ~1 minute)
+    try { coco_enqueueOrdersSyncFromPurchasesEdit_(e); } catch (err) { logError_('coco_enqueueOrdersSyncFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
+    try { coco_enqueueQcGenFromPurchasesEdit_(e); } catch (err) { logError_('coco_enqueueQcGenFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
+    try { coco_flagShipmentsCnUaeSyncFromPurchasesEdit_(e); } catch (err) { logError_('coco_flagShipmentsCnUaeSyncFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
     return;
   }
-
-
 
 
   // QC_UAE: auto-calc Qty Missing / Qty OK + QC Result on edit (script-based; no ARRAYFORMULA).
@@ -1214,70 +1216,258 @@ function coco_enqueueOrdersSyncFromPurchasesEdit_(e) {
   if (ids.length) coco_enqueueOrdersSync_(ids);
 }
 
+function coco_enqueueQcGen_(orderIds, opts) {
+  opts = opts || {};
+  return withLock_('coco_enqueueQcGen_', function () {
+    const dp = PropertiesService.getDocumentProperties();
+
+    if (opts.forceAll) {
+      dp.setProperty(APP.INTERNAL.QC_GEN_ALL_FLAG, '1');
+      dp.deleteProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY);
+      return;
+    }
+
+    const ids = (orderIds || [])
+      .map(function (x) { return String(x || '').trim(); })
+      .filter(function (x) { return !!x; });
+
+    if (!ids.length) return;
+
+    let existing = [];
+    try {
+      const raw = dp.getProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY);
+      if (raw) existing = JSON.parse(raw) || [];
+    } catch (e) { existing = []; }
+
+    const set = {};
+    existing.forEach(function (x) { set[String(x || '').trim()] = true; });
+    ids.forEach(function (x) { set[x] = true; });
+
+    const merged = Object.keys(set).filter(Boolean);
+    const capped = (merged.length > 5000) ? merged.slice(0, 5000) : merged;
+
+    dp.setProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY, JSON.stringify(capped));
+  });
+}
+
+function coco_enqueueQcGenFromPurchasesEdit_(e) {
+  if (!e || !e.range) return;
+  const sh = e.range.getSheet();
+  if (sh.getName() !== APP.SHEETS.PURCHASES) return;
+
+  const nr = e.range.getNumRows();
+  const nc = e.range.getNumColumns();
+
+  // Huge paste -> full QC generation (safer than trying to deduce IDs)
+  if (nr > 300 || nc > 25) {
+    coco_enqueueQcGen_(null, { forceAll: true });
+    return;
+  }
+
+  const map = getHeaderMap_(sh, 1);
+  const cOrder  = map[APP.COLS.PURCHASES.ORDER_ID] || map['Order ID'];
+  const cSku    = map[APP.COLS.PURCHASES.SKU] || map['SKU'];
+  const cQty    = map[APP.COLS.PURCHASES.QTY] || map['Qty'];
+  const cLineId = map[APP.COLS.PURCHASES.LINE_ID] || map['Line ID'];
+  const cProd   = map[APP.COLS.PURCHASES.PRODUCT_NAME] || map['Product Name'];
+  const cVar    = map[APP.COLS.PURCHASES.VARIANT] || map['Variant / Color'];
+
+  if (!cOrder) return;
+
+  // Only enqueue if edit intersects relevant columns
+  const c1 = e.range.getColumn();
+  const c2 = c1 + nc - 1;
+  const relevant = [cOrder, cSku, cQty, cLineId, cProd, cVar].filter(Boolean);
+  let hit = false;
+  for (let i = 0; i < relevant.length; i++) {
+    const c = relevant[i];
+    if (c >= c1 && c <= c2) { hit = true; break; }
+  }
+  if (!hit) return;
+
+  const startRow = Math.max(2, e.range.getRow());
+  const endRow = Math.min(sh.getLastRow(), e.range.getRow() + nr - 1);
+  const n = Math.max(0, endRow - startRow + 1);
+  if (n <= 0) return;
+
+  const vals = sh.getRange(startRow, cOrder, n, 1).getValues();
+  const set = {};
+  vals.forEach(function (r) {
+    const oid = String(r[0] || '').trim();
+    if (oid) set[oid] = true;
+  });
+
+  const ids = Object.keys(set);
+  if (ids.length) coco_enqueueQcGen_(ids);
+}
+
+function coco_flagShipmentsCnUaeSyncFromPurchasesEdit_(e) {
+  if (!e || !e.range) return;
+  const sh = e.range.getSheet();
+  if (sh.getName() !== APP.SHEETS.PURCHASES) return;
+
+  const nr = e.range.getNumRows();
+  const nc = e.range.getNumColumns();
+
+  const map = getHeaderMap_(sh, 1);
+  const cOrder  = map[APP.COLS.PURCHASES.ORDER_ID] || map['Order ID'];
+  const cSku    = map[APP.COLS.PURCHASES.SKU] || map['SKU'];
+  const cQty    = map[APP.COLS.PURCHASES.QTY] || map['Qty'];
+  const cLineId = map[APP.COLS.PURCHASES.LINE_ID] || map['Line ID'];
+
+  // If we can't resolve core cols, still allow a conservative flag on huge pastes
+  const c1 = e.range.getColumn();
+  const c2 = c1 + nc - 1;
+
+  if (nr <= 300 && nc <= 25 && (cOrder || cSku || cQty || cLineId)) {
+    const relevant = [cOrder, cSku, cQty, cLineId].filter(Boolean);
+    let hit = false;
+    for (let i = 0; i < relevant.length; i++) {
+      const c = relevant[i];
+      if (c >= c1 && c <= c2) { hit = true; break; }
+    }
+    if (!hit) return;
+  }
+
+  // Set a simple "needs sync" flag; processor will run full sync once
+  return withLock_('coco_flagShipmentsCnUaeSyncFromPurchasesEdit_', function () {
+    const dp = PropertiesService.getDocumentProperties();
+    dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_SYNC_FLAG, '1');
+  });
+}
 
 function coco_processSyncQueue() {
   return withLock_('coco_processSyncQueue', function () {
     const dp = PropertiesService.getDocumentProperties();
 
-    const forceAll = String(dp.getProperty(APP.INTERNAL.ORDERS_SYNC_ALL_FLAG) || '') === '1';
-    const raw = dp.getProperty(APP.INTERNAL.ORDERS_SYNC_QUEUE_KEY);
+    const ordersForceAll = String(dp.getProperty(APP.INTERNAL.ORDERS_SYNC_ALL_FLAG) || '') === '1';
+    const ordersRaw = dp.getProperty(APP.INTERNAL.ORDERS_SYNC_QUEUE_KEY);
 
-    if (!forceAll && !raw) return;
+    const qcForceAll = String(dp.getProperty(APP.INTERNAL.QC_GEN_ALL_FLAG) || '') === '1';
+    const qcRaw = dp.getProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY);
 
-    // Clear flags early; if we fail we'll restore.
+    const shipFlag = String(dp.getProperty(APP.INTERNAL.SHIP_CN_UAE_SYNC_FLAG) || '');
+
+    if (!ordersForceAll && !ordersRaw && !qcForceAll && !qcRaw && shipFlag !== '1') return;
+
+    const snapshot = {
+      ordersForceAll: ordersForceAll ? '1' : '',
+      ordersRaw: ordersRaw || '',
+      qcForceAll: qcForceAll ? '1' : '',
+      qcRaw: qcRaw || '',
+      shipFlag: shipFlag || ''
+    };
+
+    // Clear early; restore on failure
     dp.deleteProperty(APP.INTERNAL.ORDERS_SYNC_ALL_FLAG);
     dp.deleteProperty(APP.INTERNAL.ORDERS_SYNC_QUEUE_KEY);
-    // Clear last error before run
+    dp.deleteProperty(APP.INTERNAL.QC_GEN_ALL_FLAG);
+    dp.deleteProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY);
+    dp.deleteProperty(APP.INTERNAL.SHIP_CN_UAE_SYNC_FLAG);
+
     try { dp.deleteProperty(APP.INTERNAL.ORDERS_SYNC_LAST_ERROR); } catch (e) {}
+    try { dp.deleteProperty(APP.INTERNAL.QC_GEN_LAST_ERROR); } catch (e) {}
+    try { dp.deleteProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_ERROR); } catch (e) {}
+
+    let stage = 'init';
 
     try {
-      const markSuccess_ = () => {
+      // 1) Shipments CN→UAE sync (full, idempotent)
+      stage = 'shipments';
+      if (snapshot.shipFlag === '1') {
+        if (typeof syncPurchasesToShipmentsCnUae === 'function') {
+          syncPurchasesToShipmentsCnUae();
+          try { dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_RUN, new Date().toISOString()); } catch (e) {}
+        } else {
+          // Keep flag for retry and record error
+          dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_SYNC_FLAG, '1');
+          dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_ERROR, 'syncPurchasesToShipmentsCnUae is not defined.');
+        }
+      }
+
+      // 2) QC generation (batch; requires qc_generateFromPurchases_ to support arrays)
+      stage = 'qc';
+      if (snapshot.qcForceAll === '1') {
+        if (typeof qc_generateFromPurchases_ === 'function') {
+          qc_generateFromPurchases_();
+          try { dp.setProperty(APP.INTERNAL.QC_GEN_LAST_RUN, new Date().toISOString()); } catch (e) {}
+        } else {
+          dp.setProperty(APP.INTERNAL.QC_GEN_ALL_FLAG, '1');
+          dp.setProperty(APP.INTERNAL.QC_GEN_LAST_ERROR, 'qc_generateFromPurchases_ is not defined.');
+        }
+      } else if (snapshot.qcRaw) {
+        let ids = [];
+        try { ids = JSON.parse(snapshot.qcRaw) || []; } catch (e) { ids = []; }
+        ids = ids.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+
+        if (ids.length) {
+          // Runtime cap: do max 200 orderIds per minute
+          const batch = (ids.length > 200) ? ids.slice(0, 200) : ids;
+          const rest = (ids.length > batch.length) ? ids.slice(batch.length) : [];
+
+          if (typeof qc_generateFromPurchases_ === 'function') {
+            qc_generateFromPurchases_(batch);
+            try { dp.setProperty(APP.INTERNAL.QC_GEN_LAST_RUN, new Date().toISOString()); } catch (e) {}
+          } else {
+            // restore queue for retry
+            dp.setProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY, snapshot.qcRaw);
+            dp.setProperty(APP.INTERNAL.QC_GEN_LAST_ERROR, 'qc_generateFromPurchases_ is not defined.');
+          }
+
+          if (rest.length) dp.setProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY, JSON.stringify(rest));
+        }
+      }
+
+      // 3) Orders sync (existing behavior)
+      stage = 'orders';
+      const markOrdersSuccess_ = function () {
         try { dp.setProperty(APP.INTERNAL.ORDERS_SYNC_LAST_RUN, new Date().toISOString()); } catch (e) {}
       };
 
-      if (forceAll) {
+      if (snapshot.ordersForceAll === '1') {
         if (typeof rebuildOrdersSummary === 'function') {
           rebuildOrdersSummary();
         } else if (typeof orders_syncFromPurchasesByOrderIds_ === 'function') {
-          // As a fallback, treat as full sync (caller will likely rebuild anyway)
           orders_syncFromPurchasesByOrderIds_([]);
         }
-        markSuccess_();
-        return;
+        markOrdersSuccess_();
+      } else if (snapshot.ordersRaw) {
+        let ids = [];
+        try { ids = JSON.parse(snapshot.ordersRaw) || []; } catch (e) { ids = []; }
+        ids = ids.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+        if (ids.length) {
+          if (ids.length > 200 && typeof rebuildOrdersSummary === 'function') {
+            rebuildOrdersSummary();
+          } else if (typeof orders_syncFromPurchasesByOrderIds_ === 'function') {
+            orders_syncFromPurchasesByOrderIds_(ids);
+          } else if (typeof rebuildOrdersSummary === 'function') {
+            rebuildOrdersSummary();
+          }
+          markOrdersSuccess_();
+        }
       }
-
-      let ids = [];
-      try { ids = JSON.parse(raw) || []; } catch (e) { ids = []; }
-      ids = ids.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
-
-      if (!ids.length) return;
-
-      // If too many IDs, full rebuild is usually cheaper & safer.
-      if (ids.length > 200 && typeof rebuildOrdersSummary === 'function') {
-        rebuildOrdersSummary();
-        markSuccess_();
-        return;
-      }
-
-      if (typeof orders_syncFromPurchasesByOrderIds_ === 'function') {
-        orders_syncFromPurchasesByOrderIds_(ids);
-      } else if (typeof rebuildOrdersSummary === 'function') {
-        rebuildOrdersSummary();
-      }
-
-      // If we got here without throwing, mark run success
-      markSuccess_();
     } catch (err) {
-      // Restore queue for retry
-      if (forceAll) dp.setProperty(APP.INTERNAL.ORDERS_SYNC_ALL_FLAG, '1');
-      if (raw) dp.setProperty(APP.INTERNAL.ORDERS_SYNC_QUEUE_KEY, raw);
-      try { dp.setProperty(APP.INTERNAL.ORDERS_SYNC_LAST_ERROR, String((err && err.stack) || err)); } catch (e) {}
-      logError_('coco_processSyncQueue', err);
+      // Restore snapshot for retry
+      if (snapshot.ordersForceAll === '1') dp.setProperty(APP.INTERNAL.ORDERS_SYNC_ALL_FLAG, '1');
+      if (snapshot.ordersRaw) dp.setProperty(APP.INTERNAL.ORDERS_SYNC_QUEUE_KEY, snapshot.ordersRaw);
+
+      if (snapshot.qcForceAll === '1') dp.setProperty(APP.INTERNAL.QC_GEN_ALL_FLAG, '1');
+      if (snapshot.qcRaw) dp.setProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY, snapshot.qcRaw);
+
+      if (snapshot.shipFlag === '1') dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_SYNC_FLAG, '1');
+
+      try {
+        const stack = String((err && err.stack) || err);
+        if (stage === 'orders') dp.setProperty(APP.INTERNAL.ORDERS_SYNC_LAST_ERROR, stack);
+        else if (stage === 'qc') dp.setProperty(APP.INTERNAL.QC_GEN_LAST_ERROR, stack);
+        else if (stage === 'shipments') dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_ERROR, stack);
+      } catch (e) {}
+
+      logError_('coco_processSyncQueue', err, { stage: stage });
       throw err;
     }
   });
 }
-
 
 function coco_processSyncQueueNow() {
   try {
