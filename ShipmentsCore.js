@@ -1243,268 +1243,326 @@ function qc_generateFromPurchasesPrompt() {
  *   Qty Missing = Qty Ordered - Qty Received
  *   Qty OK      = Qty Received - Qty Defective
  */
-function qc_generateFromPurchases_(orderIdFilter) {
-  const purchasesSh = getSheet_(APP.SHEETS.PURCHASES);
-  const qcSh        = getSheet_(APP.SHEETS.QC_UAE);
-  const shipCnUaeSh = getSheet_(APP.SHEETS.SHIP_CN_UAE);
+function qc_generateFromPurchases_(optOrderId) {
+  try {
+    const purchSh = getSheet_(APP.SHEETS.PURCHASES);
+    const qcSh    = getSheet_(APP.SHEETS.QC_UAE);
+    const shipSh  = getSheet_(APP.SHEETS.SHIP_CN_UAE);
 
-  const pMap        = getHeaderMap_(purchasesSh);
-  const qcMap       = getHeaderMap_(qcSh);
-  const shipHdrMap  = getHeaderMap_(shipCnUaeSh);
+    const pMap    = getHeaderMap_(purchSh);
+    const qcMap   = getHeaderMap_(qcSh);
+    const shipMap = getHeaderMap_(shipSh);
 
-  const lastPurRow = purchasesSh.getLastRow();
-  if (lastPurRow < 2) return { added: 0, updated: 0, skipped: 0 };
-
-  let data = purchasesSh
-    .getRange(2, 1, lastPurRow - 1, purchasesSh.getLastColumn())
-    .getValues();
-
-  // Optional filter by Order ID
-  if (orderIdFilter) {
-    const idxOrderPurch = (pMap[APP.COLS.PURCHASES.ORDER_ID] || pMap['Order ID'] || 0) - 1;
-    if (idxOrderPurch >= 0) {
-      data = data.filter(r => String(r[idxOrderPurch]) === String(orderIdFilter));
-    }
-  }
-
-  if (!data.length) return { added: 0, updated: 0, skipped: 0 };
-
-  // QC headers (canonical labels)
-  const QC_ID_H        = 'QC ID';
-  const ORDER_H        = 'Order ID';
-  const SHIP_CN_UAE_H  = 'Shipment CN→UAE ID';
-  const SKU_H          = 'SKU';
-  const BATCH_H        = 'Batch Code';
-  const PROD_H         = 'Product Name';
-  const VAR_H          = 'Variant / Color';
-  const QTY_ORD_H      = 'Qty Ordered';
-
-  // Purchases column indexes
-  const idxOrder   = (pMap[APP.COLS.PURCHASES.ORDER_ID] || pMap['Order ID'] || 0) - 1;
-  const idxSku     = (pMap[APP.COLS.PURCHASES.SKU]      || pMap['SKU']      || 0) - 1;
-  const idxVariant = (pMap[APP.COLS.PURCHASES.VARIANT]  || pMap['Variant / Color'] || 0) - 1;
-  const idxQty     = (pMap[APP.COLS.PURCHASES.QTY]      || pMap['Qty']      || 0) - 1;
-  const idxBatch   = (pMap[APP.COLS.PURCHASES.BATCH_CODE] || pMap['Batch Code'] || 0) - 1;
-
-  const idxProd = ((pMap[APP.COLS.PURCHASES.PRODUCT_NAME] || pMap[APP.COLS.PURCHASES.PRODUCT] || pMap['Product Name'] || 0) - 1);
-
-  if (idxOrder < 0 || idxSku < 0 || idxQty < 0) {
-    throw new Error('qc_generateFromPurchases_: Missing Purchases columns (Order ID / SKU / Qty).');
-  }
-
-  // Build Shipments map: OrderID||SKU||Variant -> Shipment ID (+ Product fallback)
-  const shipIdCol   = shipHdrMap['Shipment ID'] || shipHdrMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID];
-  const shipOrdCol  = shipHdrMap['Order ID (Batch)'] || shipHdrMap['Order ID'];
-  const shipSkuCol  = shipHdrMap['SKU'];
-  const shipVarCol  = shipHdrMap['Variant / Color'] || shipHdrMap[APP.COLS.PURCHASES.VARIANT];
-  const shipProdCol = shipHdrMap['Product Name'];
-
-  /** @type {Record<string, {shipId:string, product:string}>} */
-  const shipByKey = {};
-
-  if (shipIdCol && shipOrdCol && shipSkuCol && shipCnUaeSh.getLastRow() >= 2) {
-    const shipData = shipCnUaeSh
-      .getRange(2, 1, shipCnUaeSh.getLastRow() - 1, shipCnUaeSh.getLastColumn())
-      .getValues();
-
-    shipData.forEach(r => {
-      const shipId = r[shipIdCol - 1];
-      const ordId  = r[shipOrdCol - 1];
-      const skuS   = (r[shipSkuCol - 1] || '').toString().trim();
-      const varS   = shipVarCol ? String(r[shipVarCol - 1] || '').trim() : '';
-      if (!shipId || !ordId || !skuS) return;
-
-      const key = String(ordId) + '||' + skuS + '||' + varS;
-      if (!shipByKey[key]) {
-        shipByKey[key] = {
-          shipId : String(shipId),
-          product: shipProdCol ? (r[shipProdCol - 1] || '') : ''
-        };
-      }
-    });
-  }
-
-  // Existing QC rows by Batch Code
-  const lastQcRow = qcSh.getLastRow();
-  const qcBatchColIndex = qcMap[BATCH_H] || qcMap[APP.COLS.QC_UAE.BATCH_CODE];
-  const qcQtyOrdCol     = qcMap[QTY_ORD_H] || qcMap['Qty Ordered'];
-  const qcIdColIndex    = qcMap[QC_ID_H] || qcMap[APP.COLS.QC_UAE.QC_ID];
-
-  if (!qcBatchColIndex || !qcQtyOrdCol) {
-    throw new Error('qc_generateFromPurchases_: Missing QC_UAE columns (Batch Code / Qty Ordered).');
-  }
-
-  /** @type {Record<string, number>} */
-  const batchToRow = {}; // BatchCode -> sheet row number
-
-  if (lastQcRow >= 2) {
-    const vals = qcSh.getRange(2, qcBatchColIndex, lastQcRow - 1, 1).getValues();
-    vals.forEach((r, i) => {
-      const bc = String(r[0] || '').trim();
-      if (bc && !batchToRow[bc]) batchToRow[bc] = i + 2;
-    });
-  }
-
-  // Next QC sequence
-  let nextQcSeq = 1;
-  if (qcIdColIndex && lastQcRow >= 2) {
-    const existingIds = qcSh
-      .getRange(2, qcIdColIndex, lastQcRow - 1, 1)
-      .getValues()
-      .map(r => r[0])
-      .filter(v => v);
-
-    existingIds.forEach(id => {
-      const m = String(id).match(/(\d+)$/);
-      if (m) {
-        const num = Number(m[1]);
-        if (num >= nextQcSeq) nextQcSeq = num + 1;
-      }
-    });
-  }
-
-  // Aggregate purchases by BatchCode (or fallback key)
-  /** @type {Record<string, any>} */
-  const agg = {};
-  let skipped = 0;
-
-  data.forEach(row => {
-    const orderId = row[idxOrder];
-    const sku     = (row[idxSku] || '').toString().trim();
-    const qty     = Number(row[idxQty] || 0);
-    if (!orderId || !sku || !qty) { skipped++; return; }
-
-    const variant = (idxVariant >= 0) ? String(row[idxVariant] || '').trim() : '';
-    let batchCode = (idxBatch >= 0) ? String(row[idxBatch] || '').trim() : '';
-    if (!batchCode) batchCode = variant ? (String(orderId) + '||' + sku + '||' + variant) : (String(orderId) + '||' + sku);
-
-    if (!agg[batchCode]) {
-      agg[batchCode] = {
-        batchCode: batchCode,
-        orderId: String(orderId),
-        sku: sku,
-        variant: variant,
-        qty: 0,
-        product: (idxProd >= 0) ? (row[idxProd] || '') : ''
-      };
-    }
-    agg[batchCode].qty += qty;
-    if (!agg[batchCode].product && idxProd >= 0) agg[batchCode].product = row[idxProd] || '';
-  });
-
-  const batchCodes = Object.keys(agg);
-  if (!batchCodes.length) return { added: 0, updated: 0, skipped: skipped };
-
-  const headers = qcSh.getRange(1, 1, 1, qcSh.getLastColumn()).getValues()[0];
-
-  // Build new rows (to insert at top) + updates for existing rows
-  const newRows = [];
-  const updateRows = []; // {row:number, qty:number, shipId:string, product:string, variant:string, orderId:string, sku:string, batchCode:string}
-  let added = 0;
-  let updated = 0;
-
-  batchCodes.forEach(bc => {
-    const it = agg[bc];
-    const key = it.orderId + '||' + it.sku + '||' + (it.variant || '');
-    const shipInfo = shipByKey[key] || {};
-
-    const productFinal = it.product || shipInfo.product || '';
-    const shipIdFinal  = shipInfo.shipId || '';
-
-    const existingRow = batchToRow[bc];
-    if (existingRow) {
-      updateRows.push({
-        row: existingRow,
-        qty: Number(it.qty || 0),
-        shipId: shipIdFinal,
-        product: productFinal,
-        variant: it.variant || '',
-        orderId: it.orderId,
-        sku: it.sku,
-        batchCode: bc
-      });
+    const lastPurRow = purchSh.getLastRow();
+    if (lastPurRow < 2) {
+      safeAlert_('No data found in Purchases.');
       return;
     }
 
-    /** @type {Record<string, any>} */
-    const obj = {};
-    if (qcIdColIndex) obj[QC_ID_H] = 'QC-' + Utilities.formatString('%06d', nextQcSeq++);
+    // Ensure Purchases Line IDs exist (idempotent)
+    try {
+      if (typeof purchases_ensureLineIds_ === 'function') {
+        purchases_ensureLineIds_(purchSh, pMap, 2, lastPurRow - 1);
+      }
+    } catch (e) {}
 
-    obj[ORDER_H]       = it.orderId;
-    obj[SHIP_CN_UAE_H] = shipIdFinal;
-    obj[SKU_H]         = it.sku;
-    obj[BATCH_H]       = bc;
-    obj[PROD_H]        = productFinal;
-    obj[VAR_H]         = it.variant || '';
-    obj[QTY_ORD_H]     = Number(it.qty || 0);
+    // Purchases columns
+    const colOrderId = pMap[APP.COLS.PURCHASES.ORDER_ID] || pMap['Order ID'];
+    const colSku     = pMap[APP.COLS.PURCHASES.SKU]      || pMap['SKU'];
+    const colQty     = pMap[APP.COLS.PURCHASES.QTY]      || pMap['Qty'];
+    const colLineId  = pMap[APP.COLS.PURCHASES.LINE_ID]  || pMap['Line ID'];
 
-    const outRow = headers.map(h => (obj[h] !== undefined ? obj[h] : ''));
-    newRows.push(outRow);
-    added++;
-  });
+    const colProduct = pMap[APP.COLS.PURCHASES.PRODUCT_NAME] || pMap[APP.COLS.PURCHASES.PRODUCT] || pMap['Product Name'];
+    const colVariant = pMap[APP.COLS.PURCHASES.VARIANT]      || pMap['Variant / Color'];
+    const colBatch   = pMap[APP.COLS.PURCHASES.BATCH_CODE]   || pMap['Batch Code'];
 
-  // Apply updates (qty + fill blanks best-effort)
-  if (updateRows.length) {
-    updateRows.forEach(u => {
-      if (qcQtyOrdCol) qcSh.getRange(u.row, qcQtyOrdCol).setValue(u.qty);
+    if (!colOrderId || !colSku || !colQty) {
+      throw new Error('Missing required Purchases columns (Order ID / SKU / Qty).');
+    }
+    if (!colLineId) {
+      throw new Error('Missing Purchases column "Line ID". Run Purchases layout/repair first.');
+    }
 
-      // Fill blanks (do not overwrite user's edits)
-      try {
-        if (qcMap[SHIP_CN_UAE_H]) {
-          const c = qcMap[SHIP_CN_UAE_H];
-          const cur = qcSh.getRange(u.row, c).getValue();
-          if (!cur && u.shipId) qcSh.getRange(u.row, c).setValue(u.shipId);
+    const purchData = purchSh
+      .getRange(2, 1, lastPurRow - 1, purchSh.getLastColumn())
+      .getValues();
+
+    // QC columns
+    const qcColQcId        = qcMap[APP.COLS.QC_UAE.QC_ID]    || qcMap['QC ID'];
+    const qcColOrderId     = qcMap[APP.COLS.QC_UAE.ORDER_ID] || qcMap['Order ID'];
+    const qcColShipId      = qcMap[APP.COLS.QC_UAE.SHIPMENT_ID] || qcMap['Shipment CN→UAE ID'] || qcMap['Shipment ID'];
+    const qcColSku         = qcMap[APP.COLS.QC_UAE.SKU]      || qcMap['SKU'];
+    const qcColBatch       = qcMap[APP.COLS.QC_UAE.BATCH_CODE] || qcMap['Batch Code'];
+    const qcColProduct     = qcMap['Product Name'] || qcMap[APP.COLS.QC_UAE.PRODUCT_NAME] || qcMap[APP.COLS.PURCHASES.PRODUCT_NAME];
+    const qcColVariant     = qcMap['Variant / Color'] || qcMap[APP.COLS.QC_UAE.VARIANT] || qcMap[APP.COLS.PURCHASES.VARIANT];
+    const qcColQtyOrdered  = qcMap['Qty Ordered'] || qcMap[APP.COLS.QC_UAE.QTY_ORDERED];
+    const qcColPurchLineId = qcMap[APP.COLS.QC_UAE.PURCHASE_LINE_ID] || qcMap['Purchases Line ID'];
+
+    const qcColQtyReceived = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
+    const qcColQtyDef      = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
+    const qcColQtyMissing  = qcMap[APP.COLS.QC_UAE.QTY_MISSING] || qcMap['Qty Missing'];
+    const qcColQtyOk       = qcMap[APP.COLS.QC_UAE.QTY_OK] || qcMap['Qty OK'];
+
+    if (!qcColPurchLineId) {
+      throw new Error('Missing QC_UAE column "Purchases Line ID". Run Logistics → Setup QC Layouts.');
+    }
+    if (!qcColOrderId || !qcColSku) {
+      throw new Error('Missing required QC_UAE columns (Order ID / SKU).');
+    }
+
+    // Shipments map (prefer line-level)
+    const shipColShipId    = shipMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || shipMap['Shipment ID'];
+    const shipColOrderId   = shipMap[APP.COLS.SHIP_CN_UAE.ORDER_BATCH] || shipMap['Order ID (Batch)'] || shipMap['Order ID'];
+    const shipColSku       = shipMap[APP.COLS.SHIP_CN_UAE.SKU] || shipMap['SKU'];
+    const shipColVariant   = shipMap[APP.COLS.SHIP_CN_UAE.VARIANT] || shipMap['Variant / Color'];
+    const shipColLineId    = shipMap[APP.COLS.SHIP_CN_UAE.PURCHASE_LINE_ID] || shipMap['Purchases Line ID'];
+
+    const shipIdByLineId = {};
+    const shipIdByKey = {};
+
+    const shipLastRow = shipSh.getLastRow();
+    if (shipLastRow >= 2 && shipColShipId) {
+      const shipData = shipSh.getRange(2, 1, shipLastRow - 1, shipSh.getLastColumn()).getValues();
+      shipData.forEach(function (r) {
+        const sid = String(r[shipColShipId - 1] || '').trim();
+        if (!sid) return;
+
+        if (shipColLineId) {
+          const lid = String(r[shipColLineId - 1] || '').trim();
+          if (lid && !shipIdByLineId[lid]) shipIdByLineId[lid] = sid;
         }
-        if (qcMap[PROD_H]) {
-          const c = qcMap[PROD_H];
-          const cur = qcSh.getRange(u.row, c).getValue();
-          if (!cur && u.product) qcSh.getRange(u.row, c).setValue(u.product);
+
+        const oid = shipColOrderId ? String(r[shipColOrderId - 1] || '').trim() : '';
+        const sku = shipColSku ? String(r[shipColSku - 1] || '').trim() : '';
+        const v   = shipColVariant ? String(r[shipColVariant - 1] || '').trim() : '';
+        if (oid && sku) {
+          const key = oid + '||' + sku + '||' + v;
+          if (!shipIdByKey[key]) shipIdByKey[key] = sid;
         }
-        if (qcMap[VAR_H]) {
-          const c = qcMap[VAR_H];
-          const cur = qcSh.getRange(u.row, c).getValue();
-          if (!cur && u.variant) qcSh.getRange(u.row, c).setValue(u.variant);
+      });
+    }
+
+    // QC sheet metadata
+    const qcLastCol = qcSh.getLastColumn();
+    const qcHeaders = qcSh.getRange(1, 1, 1, qcLastCol).getValues()[0];
+    const formulasRow2 = qcSh.getRange(2, 1, 1, qcLastCol).getFormulas()[0];
+
+    function _pickAnchorCol_() {
+      const candidates = [qcColPurchLineId, qcColQcId, qcColOrderId, qcColSku].filter(function (c) { return !!c; });
+      for (let i = 0; i < candidates.length; i++) {
+        const c = candidates[i];
+        if (!formulasRow2[c - 1]) return c;
+      }
+      return candidates.length ? candidates[0] : 1;
+    }
+
+    const anchorCol = _pickAnchorCol_();
+    let dataLastRow = 1;
+    try {
+      dataLastRow = qcSh.getRange(qcSh.getMaxRows(), anchorCol)
+        .getNextDataCell(SpreadsheetApp.Direction.UP)
+        .getRow();
+      if (dataLastRow < 2) dataLastRow = 1;
+    } catch (e) {
+      dataLastRow = qcSh.getLastRow();
+      if (dataLastRow < 2) dataLastRow = 1;
+    }
+
+    const existingN = (dataLastRow >= 2) ? (dataLastRow - 1) : 0;
+    const existingData = existingN
+      ? qcSh.getRange(2, 1, existingN, qcLastCol).getValues()
+      : [];
+
+    const existingByLineId = {};
+    let maxSeq = 0;
+
+    existingData.forEach(function (row, i) {
+      const sheetRow = i + 2;
+      const lid = String(row[qcColPurchLineId - 1] || '').trim();
+      if (lid && !existingByLineId[lid]) existingByLineId[lid] = sheetRow;
+
+      if (qcColQcId) {
+        const qcId = String(row[qcColQcId - 1] || '').trim();
+        const m = qcId.match(/(\d+)$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (n > maxSeq) maxSeq = n;
         }
-        if (qcMap[ORDER_H]) {
-          const c = qcMap[ORDER_H];
-          const cur = qcSh.getRange(u.row, c).getValue();
-          if (!cur && u.orderId) qcSh.getRange(u.row, c).setValue(u.orderId);
-        }
-        if (qcMap[SKU_H]) {
-          const c = qcMap[SKU_H];
-          const cur = qcSh.getRange(u.row, c).getValue();
-          if (!cur && u.sku) qcSh.getRange(u.row, c).setValue(u.sku);
-        }
-        if (qcMap[BATCH_H]) {
-          const c = qcMap[BATCH_H];
-          const cur = qcSh.getRange(u.row, c).getValue();
-          if (!cur && u.batchCode) qcSh.getRange(u.row, c).setValue(u.batchCode);
-        }
-      } catch (e) {}
+      }
     });
-    updated = updateRows.length;
-  }
 
-  // Insert new rows at TOP (row 2)
-  if (newRows.length) {
-    qcSh.insertRowsBefore(2, newRows.length);
-    qcSh.getRange(2, 1, newRows.length, headers.length).setValues(newRows);
-  }
+    const updates = [];
+    const newRowsFull = [];
 
-  // Recalc computed QC columns for affected rows (since script edits don't fire onEdit)
-  try {
-    const startRow = 2;
-    const nRows = Math.max(0, (newRows.length + updateRows.length));
-    if (nRows) qc_recalcRows_(qcSh, qcMap, startRow, Math.min(qcSh.getLastRow() - 1, nRows), { silent: true, setDate: false });
+    const filterOrderId = (optOrderId || '').toString().trim();
+    const seenInRun = {};
+
+    purchData.forEach(function (r) {
+      const orderId = String(r[colOrderId - 1] || '').trim();
+      if (!orderId) return;
+      if (filterOrderId && orderId !== filterOrderId) return;
+
+      const sku = String(r[colSku - 1] || '').trim();
+      const qty = Number(r[colQty - 1] || 0);
+      const lineId = String(r[colLineId - 1] || '').trim();
+
+      if (!sku || !qty || !lineId) return;
+
+      if (seenInRun[lineId]) return;
+      seenInRun[lineId] = true;
+
+      const variant = colVariant ? String(r[colVariant - 1] || '').trim() : '';
+      const product = colProduct ? String(r[colProduct - 1] || '').trim() : '';
+      const batch   = colBatch ? String(r[colBatch - 1] || '').trim() : '';
+
+      const shipKey = orderId + '||' + sku + '||' + variant;
+      const shipId = (shipIdByLineId[lineId] || shipIdByKey[shipKey] || '');
+
+      const existingRow = existingByLineId[lineId];
+      if (existingRow) {
+        updates.push({
+          row: existingRow,
+          qtyOrdered: qty,
+          shipId: shipId,
+          product: product,
+          variant: variant,
+          batch: batch
+        });
+        return;
+      }
+
+      maxSeq++;
+      const qcId = 'QC-' + Utilities.formatString('%06d', maxSeq);
+
+      const rowObj = {};
+      rowObj['QC ID']               = qcId;
+      rowObj['Order ID']            = orderId;
+      rowObj['Shipment CN→UAE ID']  = shipId;
+      rowObj['SKU']                 = sku;
+      rowObj['Batch Code']          = batch || '';
+      rowObj['Product Name']        = product || '';
+      rowObj['Variant / Color']     = variant || '';
+      rowObj['Qty Ordered']         = qty;
+      rowObj['Qty Received']        = '';
+      rowObj['Qty Defective']       = '';
+      rowObj['Qty Missing']         = '';
+      rowObj['Qty OK']              = '';
+      rowObj['Notes']               = 'Auto (line-level) from Purchases';
+      rowObj['Purchases Line ID']   = lineId;
+
+      const outRow = qcHeaders.map(function (h) {
+        return (rowObj[h] !== undefined) ? rowObj[h] : '';
+      });
+
+      newRowsFull.push(outRow);
+    });
+
+    if (!newRowsFull.length && !updates.length) {
+      safeAlert_('No new QC rows to generate.');
+      return;
+    }
+
+    // 1) Updates
+    if (updates.length) {
+      updates.forEach(function (u) {
+        const r = u.row;
+
+        if (qcColQtyOrdered) qcSh.getRange(r, qcColQtyOrdered).setValue(u.qtyOrdered);
+
+        if (qcColShipId && u.shipId) {
+          const cur = qcSh.getRange(r, qcColShipId).getValue();
+          if (!cur) qcSh.getRange(r, qcColShipId).setValue(u.shipId);
+        }
+        if (qcColBatch && u.batch) {
+          const cur = qcSh.getRange(r, qcColBatch).getValue();
+          if (!cur) qcSh.getRange(r, qcColBatch).setValue(u.batch);
+        }
+        if (qcColProduct && u.product) {
+          const cur = qcSh.getRange(r, qcColProduct).getValue();
+          if (!cur) qcSh.getRange(r, qcColProduct).setValue(u.product);
+        }
+        if (qcColVariant && u.variant) {
+          const cur = qcSh.getRange(r, qcColVariant).getValue();
+          if (!cur) qcSh.getRange(r, qcColVariant).setValue(u.variant);
+        }
+      });
+    }
+
+    // 2) Insert at TOP without breaking ARRAYFORMULA anchors (shift non-formula columns only)
+    if (newRowsFull.length) {
+      const insertCount = newRowsFull.length;
+
+      const shiftCols = [];
+      for (let c = 1; c <= qcLastCol; c++) {
+        if (!formulasRow2[c - 1]) shiftCols.push(c);
+      }
+
+      const segments = [];
+      if (shiftCols.length) {
+        let start = shiftCols[0];
+        let prev = start;
+        for (let i = 1; i < shiftCols.length; i++) {
+          const cur = shiftCols[i];
+          if (cur === prev + 1) {
+            prev = cur;
+            continue;
+          }
+          segments.push({ startCol: start, numCols: (prev - start + 1) });
+          start = cur;
+          prev = cur;
+        }
+        segments.push({ startCol: start, numCols: (prev - start + 1) });
+      }
+
+      const targetLastRow = 1 + existingN + insertCount;
+      if (qcSh.getMaxRows() < targetLastRow) {
+        qcSh.insertRowsAfter(qcSh.getMaxRows(), targetLastRow - qcSh.getMaxRows());
+      }
+
+      segments.forEach(function (seg) {
+        const startCol = seg.startCol;
+        const numCols  = seg.numCols;
+
+        const existingSeg = existingN
+          ? qcSh.getRange(2, startCol, existingN, numCols).getValues()
+          : [];
+
+        const out = [];
+        for (let i = 0; i < insertCount; i++) {
+          out.push(newRowsFull[i].slice(startCol - 1, startCol - 1 + numCols));
+        }
+        for (let i = 0; i < existingSeg.length; i++) out.push(existingSeg[i]);
+
+        qcSh.getRange(2, startCol, out.length, numCols).setValues(out);
+      });
+    }
+
+    // Optional: recalc derived columns only if NOT formula-driven at row2
+    try {
+      const canRecalcMissingOk =
+        qcColQtyMissing && qcColQtyOk &&
+        !formulasRow2[qcColQtyMissing - 1] &&
+        !formulasRow2[qcColQtyOk - 1];
+
+      if (typeof qc_recalcRows_ === 'function' && canRecalcMissingOk) {
+        const rowsToRecalc = Math.min(1000, (existingN + newRowsFull.length + 5));
+        qc_recalcRows_(qcSh, 2, rowsToRecalc);
+      }
+    } catch (e) {}
+
+    try { setupQcWarehouseValidation_(); } catch (e) {}
+
+    safeAlert_(
+      'QC_UAE generation done.\n' +
+      'Inserted rows: ' + newRowsFull.length + '\n' +
+      'Updated rows: ' + updates.length
+    );
+
   } catch (e) {
-    logError_('qc_generateFromPurchases_recalc', e);
+    logError_('qc_generateFromPurchases_', e, { optOrderId: optOrderId });
+    throw e;
   }
-
-  return { added: added, updated: updated, skipped: skipped };
 }
-
-
-
 
 /**
  * Recalculate QC_UAE quantities & result:
