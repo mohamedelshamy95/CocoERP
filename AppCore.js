@@ -136,7 +136,7 @@ const APP = {
       QC_RESULT:    'QC Result',
       QC_DATE:      'QC Date',
       WAREHOUSE:    'Warehouse (UAE)',
-      PURCHASE_LINE_ID: 'Purchases Line ID'
+      PURCHASE_LINE_ID: 'Purchases Line ID',
       NOTES:        'Notes'
     },
 
