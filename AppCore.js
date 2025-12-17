@@ -315,14 +315,25 @@ const APP = {
   },
 
   INTERNAL: {
-    SETTINGS_CACHE_KEY: 'CocoERP_SettingsMap_v1',
-    USE_INSTALLABLE_ONEDIT_PROP: 'CocoERP_UseInstallableOnEdit'
-    ,
-    // Orders sync queue (Purchases → Orders)
-    ORDERS_SYNC_QUEUE_KEY: 'CocoERP_OrdersSyncQueue_v1',
-    ORDERS_SYNC_ALL_FLAG:  'CocoERP_OrdersSyncAllFlag_v1',
-    ORDERS_SYNC_LAST_RUN:  'CocoERP_OrdersSyncLastRun_v1',
-    ORDERS_SYNC_LAST_ERROR:'CocoERP_OrdersSyncLastError_v1'
+  SETTINGS_CACHE_KEY: 'CocoERP_SettingsMap_v1',
+  USE_INSTALLABLE_ONEDIT_PROP: 'CocoERP_UseInstallableOnEdit',
+
+  // Orders sync queue (Purchases → Orders)
+  ORDERS_SYNC_QUEUE_KEY: 'CocoERP_OrdersSyncQueue_v1',
+  ORDERS_SYNC_ALL_FLAG: 'CocoERP_OrdersSyncAllFlag_v1',
+  ORDERS_SYNC_LAST_RUN: 'CocoERP_OrdersSyncLastRun_v1',
+  ORDERS_SYNC_LAST_ERROR:'CocoERP_OrdersSyncLastError_v1',
+
+  // QC generation queue (Purchases → QC_UAE)
+  QC_GEN_QUEUE_KEY: 'CocoERP_QcGenQueue_v1',
+  QC_GEN_ALL_FLAG: 'CocoERP_QcGenAllFlag_v1',
+  QC_GEN_LAST_RUN: 'CocoERP_QcGenLastRun_v1',
+  QC_GEN_LAST_ERROR:'CocoERP_QcGenLastError_v1',
+
+  // Shipments CN→UAE sync flag (Purchases → Shipments_CN_UAE)
+  SHIP_CN_UAE_SYNC_FLAG: 'CocoERP_ShipCnUaeSyncFlag_v1',
+  SHIP_CN_UAE_LAST_RUN: 'CocoERP_ShipCnUaeLastRun_v1',
+  SHIP_CN_UAE_LAST_ERROR:'CocoERP_ShipCnUaeLastError_v1'
 }
 };
 
