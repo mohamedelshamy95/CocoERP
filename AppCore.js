@@ -973,8 +973,13 @@ function _dispatchOnEdit_(e) {
     return;
   }
 
-  if (name === APP.SHEETS.SHIP_CN_UAE && typeof shipmentsCnUaeOnEdit_ === 'function') {
-    shipmentsCnUaeOnEdit_(e);
+  if (name === APP.SHEETS.SHIP_CN_UAE) {
+    try { if (typeof shipmentsCnUaeOnEdit_ === 'function') shipmentsCnUaeOnEdit_(e); }
+    catch (err) { logError_('shipmentsCnUaeOnEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
+
+    try { coco_enqueueQcGenFromShipmentsCnUaeEdit_(e); }
+    catch (err) { logError_('coco_enqueueQcGenFromShipmentsCnUaeEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
+
     return;
   }
 
@@ -987,6 +992,58 @@ function _dispatchOnEdit_(e) {
     salesEgOnEdit_(e);
     return;
   }
+}
+
+function coco_enqueueQcGenFromShipmentsCnUaeEdit_(e) {
+  if (!e || !e.range) return;
+  const sh = e.range.getSheet();
+  if (sh.getName() !== APP.SHEETS.SHIP_CN_UAE) return;
+
+  const map = getHeaderMap_(sh, 1);
+
+  const cOrder   = map[APP.COLS.SHIP_CN_UAE.ORDER_BATCH] || map['Order ID (Batch)'] || map['Order ID'];
+  const cArrival = map[APP.COLS.SHIP_CN_UAE.ARRIVAL] || map['Actual Arrival'];
+  const cStatus  = map[APP.COLS.SHIP_CN_UAE.STATUS] || map['Status'];
+
+  if (!cOrder) return;
+
+  const nr = e.range.getNumRows();
+  const nc = e.range.getNumColumns();
+  const c1 = e.range.getColumn();
+  const c2 = c1 + nc - 1;
+
+  // Only react if edit touches Arrival/Status columns
+  const relevant = [cArrival, cStatus].filter(Boolean);
+  let hit = false;
+  for (let i = 0; i < relevant.length; i++) {
+    const c = relevant[i];
+    if (c >= c1 && c <= c2) { hit = true; break; }
+  }
+  if (!hit) return;
+
+  const startRow = Math.max(2, e.range.getRow());
+  const endRow = Math.min(sh.getLastRow(), e.range.getRow() + nr - 1);
+  const n = Math.max(0, endRow - startRow + 1);
+  if (n <= 0) return;
+
+  const orderVals  = sh.getRange(startRow, cOrder, n, 1).getValues();
+  const statusVals = cStatus ? sh.getRange(startRow, cStatus, n, 1).getValues() : null;
+  const arrVals    = cArrival ? sh.getRange(startRow, cArrival, n, 1).getValues() : null;
+
+  const set = {};
+  for (let i = 0; i < n; i++) {
+    const oid = String(orderVals[i][0] || '').trim();
+    if (!oid) continue;
+
+    const status = statusVals ? String(statusVals[i][0] || '').trim() : '';
+    const arrival = arrVals ? arrVals[i][0] : null;
+
+    const isArrivedUAE = !!arrival || status === 'Arrived UAE';
+    if (isArrivedUAE) set[oid] = true;
+  }
+
+  const ids = Object.keys(set);
+  if (ids.length) coco_enqueueQcGen_(ids);
 }
 
 function onEdit(e) {
