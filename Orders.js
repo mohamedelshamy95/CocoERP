@@ -28,6 +28,28 @@ const ORDER_HEADERS = [
   'Notes'
 ];
 
+function orders_tryGetUi_() {
+  try {
+    return SpreadsheetApp.getUi();
+  } catch (e) {
+    return null; // Trigger / time-driven context
+  }
+}
+
+function orders_alert_(msg) {
+  var text = String(msg);
+  var ui = orders_tryGetUi_();
+  if (ui) {
+    ui.alert(text);
+    return;
+  }
+  if (typeof safeAlert_ === 'function') {
+    safeAlert_(text);
+    return;
+  }
+  Logger.log(text);
+}
+
 /** ============================================================
  * Layout (SAFE) – ensure headers/schema without wiping data
  * ============================================================ */
@@ -51,7 +73,7 @@ function setupOrdersLayout() {
     orders_applyHeaderStyle_(shO, ORDER_HEADERS);
     ensureErrorLog_();
 
-    SpreadsheetApp.getUi().alert('✅ Orders layout ensured (بدون مسح بيانات).');
+    orders_alert_('✅ Orders layout ensured (بدون مسح بيانات).');
   } catch (e) {
     logError_('setupOrdersLayout', e);
     throw e;
@@ -66,7 +88,8 @@ function setupOrdersLayoutHardReset() {
     ensureErrorLog_();
 
     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
-    const ui = SpreadsheetApp.getUi();
+    const ui = orders_tryGetUi_();
+    if (!ui) throw new Error('This action requires UI (run from spreadsheet menu).');
     const res = ui.alert('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO);
     if (res !== ui.Button.YES) return;
 
@@ -78,7 +101,7 @@ function setupOrdersLayoutHardReset() {
     shO.getRange(1, 1, 1, ORDER_HEADERS.length).setValues([ORDER_HEADERS]);
 
     orders_applyHeaderStyle_(shO, ORDER_HEADERS);
-    SpreadsheetApp.getUi().alert('✅ Orders HARD RESET done.');
+    orders_alert_('✅ Orders HARD RESET done.');
   } catch (e) {
     logError_('setupOrdersLayoutHardReset', e);
     throw e;
@@ -634,9 +657,9 @@ function testOrdersModule_() {
     setupOrdersLayout();
     rebuildOrdersSummary();
 
-    SpreadsheetApp.getUi().alert('✅ Orders module basic test passed.');
+    orders_alert_('✅ Orders module basic test passed.');
   } catch (e) {
     logError_('testOrdersModule_', e);
-    SpreadsheetApp.getUi().alert('❌ Orders module test failed: ' + e.message);
+    orders_alert_('❌ Orders module test failed: ' + e.message);
   }
 }
