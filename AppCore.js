@@ -1482,8 +1482,9 @@ function coco_processSyncQueue() {
 
     const shipFlag = String(dp.getProperty(APP.INTERNAL.SHIP_CN_UAE_SYNC_FLAG) || '');
 
-    if (!ordersForceAll && !ordersRaw && !qcForceAll && !qcRaw && shipFlag !== '1') return;
-
+    const qcInvFlag0 = String(dp.getProperty(APP.INTERNAL.QC_INV_SYNC_FLAG) || '');
+    const shipUaeEgInvFlag0 = String(dp.getProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG) || '');
+    if (!ordersForceAll && !ordersRaw && !qcForceAll && !qcRaw && shipFlag !== '1' && qcInvFlag0 !== '1' && shipUaeEgInvFlag0 !== '1') return;
     const snapshot = {
       ordersForceAll: ordersForceAll ? '1' : '',
       ordersRaw: ordersRaw || '',
@@ -1525,6 +1526,7 @@ function coco_processSyncQueue() {
         if (typeof qc_generateFromPurchases_ === 'function') {
           qc_generateFromPurchases_();
           try { dp.setProperty(APP.INTERNAL.QC_GEN_LAST_RUN, new Date().toISOString()); } catch (e) {}
+          try { dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); } catch (e) {}
         } else {
           dp.setProperty(APP.INTERNAL.QC_GEN_ALL_FLAG, '1');
           dp.setProperty(APP.INTERNAL.QC_GEN_LAST_ERROR, 'qc_generateFromPurchases_ is not defined.');
@@ -1542,6 +1544,7 @@ function coco_processSyncQueue() {
           if (typeof qc_generateFromPurchases_ === 'function') {
             qc_generateFromPurchases_(batch);
             try { dp.setProperty(APP.INTERNAL.QC_GEN_LAST_RUN, new Date().toISOString()); } catch (e) {}
+            try { dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); } catch (e) {}
           } else {
             // restore queue for retry
             dp.setProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY, snapshot.qcRaw);

@@ -75,7 +75,9 @@ function setupInventoryCoreLayout() {
     setupInventorySnapshotUAE_();
     setupInventorySnapshotEG_();
 
-    SpreadsheetApp.getUi().alert(
+    if (typeof safeAlert_ === 'function') safeAlert_(
+      'تم تجهيز Inventory_Transactions و Inventory_UAE و Inventory_EG ✔️'
+    ); else Logger.log(
       'تم تجهيز Inventory_Transactions و Inventory_UAE و Inventory_EG ✔️'
     );
   } catch (e) {
@@ -136,7 +138,7 @@ function inv_repairInventoryTransactionsHeaders() {
 
     inv_repairInventoryTransactionsHeaders_(ledgerSh);
 
-    SpreadsheetApp.getUi().alert('Inventory_Transactions headers repaired ✔️');
+    if (typeof safeAlert_ === 'function') safeAlert_('Inventory_Transactions headers repaired ✔️'); else Logger.log('Inventory_Transactions headers repaired ✔️');
   } catch (e) {
     logError_('inv_repairInventoryTransactionsHeaders', e);
     throw e;
@@ -385,8 +387,7 @@ function logInventoryTxnBatch_(payloads, opts) {
   // Map payload keys by header label (canonical)
   const keyByHeader = {};
   keyByHeader[APP.COLS.INV_TXNS.TXN_DATE]    = 'txnDate';
-  keyByHeader[APP.COLS.INV_TXNS.TYPE]        = 'type';
-  keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
+keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
   keyByHeader[APP.COLS.INV_TXNS.SOURCE_ID]   = 'sourceId';
   keyByHeader[APP.COLS.INV_TXNS.BATCH_CODE]  = 'batchCode';
   keyByHeader[APP.COLS.INV_TXNS.SKU]         = 'sku';

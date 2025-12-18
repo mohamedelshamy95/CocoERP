@@ -30,7 +30,7 @@ const ORDER_HEADERS = [
 
 function orders_tryGetUi_() {
   try {
-    return SpreadsheetApp.getUi();
+    return (SpreadsheetApp.getUi ? SpreadsheetApp.getUi() : null);
   } catch (e) {
     return null; // Trigger / time-driven context
   }
@@ -40,7 +40,7 @@ function orders_alert_(msg) {
   var text = String(msg);
   var ui = orders_tryGetUi_();
   if (ui) {
-    ui.alert(text);
+    if (ui) ui.alert(text); else if (typeof safeAlert_ === 'function') safeAlert_(text); else Logger.log(text);
     return;
   }
   if (typeof safeAlert_ === 'function') {
@@ -90,7 +90,7 @@ function setupOrdersLayoutHardReset() {
     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
     const ui = orders_tryGetUi_();
     if (!ui) throw new Error('This action requires UI (run from spreadsheet menu).');
-    const res = ui.alert('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO);
+    const res = if (ui) ui.alert('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO); else if (typeof safeAlert_ === 'function') safeAlert_('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO); else Logger.log('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO);
     if (res !== ui.Button.YES) return;
 
     orders_removeFilterIfAny_(shO);
