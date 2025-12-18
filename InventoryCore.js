@@ -819,8 +819,16 @@ function inv_rebuildAllSnapshots() {
   try {
     rebuildInventoryUAEFromLedger();
     rebuildInventoryEGFromLedger();
-    if (typeof safeAlert_ === 'function') safeAlert_('Inventory snapshots rebuilt (UAE + EG).');
-    else Logger.log('Inventory snapshots rebuilt (UAE + EG).');}
+
+    if (typeof safeAlert_ === 'function') {
+      safeAlert_('Inventory snapshots rebuilt (UAE + EG).');
+    } else {
+      Logger.log('Inventory snapshots rebuilt (UAE + EG).');
+    }
+  } catch (err) {
+    try { logError_('inv_rebuildAllSnapshots', err); } catch (e) {}
+    throw err;
+  }
 }
 
 /**
