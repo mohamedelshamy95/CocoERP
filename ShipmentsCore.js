@@ -1970,10 +1970,11 @@ function syncQCtoInventory_UAE() {
     } else {
       Logger.log('QC_UAE Sync Done. New txns=' + newTxns + ', skipped=' + skipped);
     }
-    catch (e) {
+  } catch (e) {
     logError_('syncQCtoInventory_UAE', e);
     throw e;
   }
+}
 
 /**
  * Sync Shipments_UAE_EG → Inventory_Transactions + snapshots
