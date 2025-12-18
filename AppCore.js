@@ -333,7 +333,18 @@ const APP = {
   // Shipments CN→UAE sync flag (Purchases → Shipments_CN_UAE)
   SHIP_CN_UAE_SYNC_FLAG: 'CocoERP_ShipCnUaeSyncFlag_v1',
   SHIP_CN_UAE_LAST_RUN: 'CocoERP_ShipCnUaeLastRun_v1',
-  SHIP_CN_UAE_LAST_ERROR:'CocoERP_ShipCnUaeLastError_v1'
+  SHIP_CN_UAE_LAST_ERROR:'CocoERP_ShipCnUaeLastError_v1', 
+  
+  // QC → Inventory sync flag
+  QC_INV_SYNC_FLAG: 'CocoERP_QcInvSyncFlag_v1',
+  QC_INV_LAST_RUN: 'CocoERP_QcInvLastRun_v1',
+  QC_INV_LAST_ERROR: 'CocoERP_QcInvLastError_v1',
+
+  // Shipments UAE→EG → Inventory sync flag
+  SHIP_UAE_EG_INV_SYNC_FLAG: 'CocoERP_ShipUaeEgInvSyncFlag_v1',
+  SHIP_UAE_EG_INV_LAST_RUN: 'CocoERP_ShipUaeEgInvLastRun_v1',
+  SHIP_UAE_EG_INV_LAST_ERROR: 'CocoERP_ShipUaeEgInvLastError_v1'
+  
 }
 };
 
@@ -953,10 +964,6 @@ function _dispatchOnEdit_(e) {
       logError_('purchasesOnEditSku_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() });
     }
 
-    // Enqueue Orders sync (time-trigger processes within ~1 minute)
-    try { coco_enqueueOrdersSyncFromPurchasesEdit_(e); } catch (err) {
-      logError_('coco_enqueueOrdersSyncFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() });
-    }
     // Enqueue incremental sync tasks (time-trigger processes within ~1 minute)
     try { coco_enqueueOrdersSyncFromPurchasesEdit_(e); } catch (err) { logError_('coco_enqueueOrdersSyncFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
     try { coco_enqueueQcGenFromPurchasesEdit_(e); } catch (err) { logError_('coco_enqueueQcGenFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
@@ -970,6 +977,8 @@ function _dispatchOnEdit_(e) {
     try { if (typeof qcOnEdit_ === 'function') qcOnEdit_(e); } catch (err) {
       logError_('qcOnEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() });
     }
+    try { coco_flagQcInventorySyncFromQcEdit_(e); } catch (err) { logError_('coco_flagQcInventorySyncFromQcEdit_', err); }
+
     return;
   }
 
@@ -985,6 +994,7 @@ function _dispatchOnEdit_(e) {
 
   if (name === APP.SHEETS.SHIP_UAE_EG && typeof shipmentsUaeEgOnEdit_ === 'function') {
     shipmentsUaeEgOnEdit_(e);
+    try { coco_flagShipUaeEgInventorySyncFromEdit_(e); } catch (err) { logError_('coco_flagShipUaeEgInventorySyncFromEdit_', err); }
     return;
   }
 
@@ -1393,6 +1403,73 @@ function coco_flagShipmentsCnUaeSyncFromPurchasesEdit_(e) {
   });
 }
 
+function coco_flagQcInventorySyncFromQcEdit_(e) {
+  try {
+    if (!e || !e.range) return;
+    const sh = e.range.getSheet();
+    const map = getHeaderMap_(sh, 1);
+
+    const c1 = e.range.getColumn();
+    const c2 = c1 + (e.range.getNumColumns ? e.range.getNumColumns() : 1) - 1;
+
+    const candidates = [
+      APP.COLS.QC_UAE.QTY_RECEIVED,
+      APP.COLS.QC_UAE.QTY_DEFECT,
+      APP.COLS.QC_UAE.QTY_OK,
+      APP.COLS.QC_UAE.QC_RESULT,
+      APP.COLS.QC_UAE.WAREHOUSE,
+    ];
+
+    let hit = false;
+    for (let i = 0; i < candidates.length; i++) {
+      const col = map[candidates[i]];
+      if (col && col >= c1 && col <= c2) { hit = true; break; }
+    }
+    if (!hit) return;
+
+    PropertiesService.getDocumentProperties().setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1');
+  } catch (err) {
+    logError_('coco_flagQcInventorySyncFromQcEdit_', err);
+  }
+}
+
+function coco_flagShipUaeEgInventorySyncFromEdit_(e) {
+  try {
+    if (!e || !e.range) return;
+    const sh = e.range.getSheet();
+    const map = getHeaderMap_(sh, 1);
+
+    const c1 = e.range.getColumn();
+    const c2 = c1 + (e.range.getNumColumns ? e.range.getNumColumns() : 1) - 1;
+
+    const candidates = [
+      APP.COLS.SHIP_UAE_EG.SHIPMENT_ID,
+      APP.COLS.SHIP_UAE_EG.SKU,
+      APP.COLS.SHIP_UAE_EG.QTY,
+      APP.COLS.SHIP_UAE_EG.QTY_SYNCED,
+      APP.COLS.SHIP_UAE_EG.SHIP_DATE,
+      APP.COLS.SHIP_UAE_EG.ARRIVAL,
+      APP.COLS.SHIP_UAE_EG.SHIP_COST,
+      APP.COLS.SHIP_UAE_EG.CUSTOMS,
+      APP.COLS.SHIP_UAE_EG.OTHER,
+      APP.COLS.SHIP_UAE_EG.TOTAL_COST,
+      'Warehouse (UAE)',
+      'Courier',
+    ];
+
+    let hit = false;
+    for (let i = 0; i < candidates.length; i++) {
+      const col = map[candidates[i]];
+      if (col && col >= c1 && col <= c2) { hit = true; break; }
+    }
+    if (!hit) return;
+
+    PropertiesService.getDocumentProperties().setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1');
+  } catch (err) {
+    logError_('coco_flagShipUaeEgInventorySyncFromEdit_', err);
+  }
+}
+
 function coco_processSyncQueue() {
   return withLock_('coco_processSyncQueue', function () {
     const dp = PropertiesService.getDocumentProperties();
@@ -1474,6 +1551,43 @@ function coco_processSyncQueue() {
           if (rest.length) dp.setProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY, JSON.stringify(rest));
         }
       }
+
+       const qcInvFlag = String(dp.getProperty(APP.INTERNAL.QC_INV_SYNC_FLAG) || '') === '1';
+const shipUaeEgInvFlag = String(dp.getProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG) || '') === '1';
+
+// Clear flags early (debounce). If errors happen, we re-set them.
+if (qcInvFlag) dp.deleteProperty(APP.INTERNAL.QC_INV_SYNC_FLAG);
+if (shipUaeEgInvFlag) dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG);
+
+if (qcInvFlag) {
+  try {
+    withLock_('QC_INV_SYNC', function () {
+      if (typeof syncQCtoInventory_UAE !== 'function') throw new Error('syncQCtoInventory_UAE is not defined');
+      syncQCtoInventory_UAE();
+    });
+    dp.setProperty(APP.INTERNAL.QC_INV_LAST_RUN, new Date().toISOString());
+    dp.deleteProperty(APP.INTERNAL.QC_INV_LAST_ERROR);
+  } catch (err) {
+    dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); // requeue
+    dp.setProperty(APP.INTERNAL.QC_INV_LAST_ERROR, String(err && err.message ? err.message : err));
+    logError_('coco_processSyncQueue:QC_INV', err);
+  }
+}
+
+if (shipUaeEgInvFlag) {
+  try {
+    withLock_('SHIP_UAE_EG_INV_SYNC', function () {
+      if (typeof syncShipmentsUaeEgToInventory !== 'function') throw new Error('syncShipmentsUaeEgToInventory is not defined');
+      syncShipmentsUaeEgToInventory();
+    });
+    dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_RUN, new Date().toISOString());
+    dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR);
+  } catch (err) {
+    dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1'); // requeue
+    dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR, String(err && err.message ? err.message : err));
+    logError_('coco_processSyncQueue:SHIP_UAE_EG_INV', err);
+  }
+}
 
       // 3) Orders sync (existing behavior)
       stage = 'orders';
