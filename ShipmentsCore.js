@@ -1965,13 +1965,12 @@ function syncQCtoInventory_UAE() {
     }
 
     inv_rebuildAllSnapshots();
-
-    SpreadsheetApp.getUi().alert(
-      'QC_UAE Sync Done.\n\nNew txns: ' + newTxns +
-      '\nSkipped (already synced): ' + skipped
-    );
-
-  } catch (e) {
+    if (typeof safeAlert_ === 'function') {
+      safeAlert_('QC_UAE Sync Done.\n\nNew txns: ' + newTxns + '\nSkipped (already synced): ' + skipped);
+    } else {
+      Logger.log('QC_UAE Sync Done. New txns=' + newTxns + ', skipped=' + skipped);
+    }
+ catch (e) {
     logError_('syncQCtoInventory_UAE', e);
     throw e;
   }
@@ -1991,7 +1990,7 @@ function syncQCtoInventory_UAE() {
  *      * لو لسه مش واضح → نرجع لأول Warehouse للـ SKU من Inventory_UAE.
  *
  *  - النتيجة: OUT من Warehouse الحقيقي (UAE-ATTIA / UAE-KOR / ...),
- *             IN في EG-CAI بالـ landed cost.
+ *             IN في TAN-GH بالـ landed cost.
  */
 function syncShipmentsUaeEgToInventory() {
   try {
@@ -2215,7 +2214,7 @@ function syncShipmentsUaeEgToInventory() {
         });
         outCount++;
 
-        // ===== IN to EG-CAI at landed cost =====
+        // ===== IN to TAN-GH at landed cost =====
         txns.push({
           type        : 'IN',
           sourceType  : 'SHIP_UAE_EG',
@@ -2224,12 +2223,12 @@ function syncShipmentsUaeEgToInventory() {
           sku         : String(sku),
           productName : info.product || (idxShipProdName != null ? row[idxShipProdName] : '') || '',
           variant     : info.variant || (idxShipVariant != null ? row[idxShipVariant] : '') || '',
-          warehouse   : 'EG-CAI',
+          warehouse   : (APP.WAREHOUSES && APP.WAREHOUSES.TAN_GH) ? APP.WAREHOUSES.TAN_GH : 'TAN-GH',
           qty         : delta,
           unitCostEgp : landedCost,
           currency    : 'EGP',
           txnDate     : inTxnDate,
-          notes       : 'UAE→EG IN (EG-CAI), delta=' + delta + ', landedCost=' + landedCost.toFixed(2)
+          notes       : 'UAE→EG IN (TAN-GH), delta=' + delta + ', landedCost=' + landedCost.toFixed(2)
         });
         inCount++;
 
@@ -2252,11 +2251,15 @@ function syncShipmentsUaeEgToInventory() {
       // Rebuild snapshots
       inv_rebuildAllSnapshots();
 
-      SpreadsheetApp.getUi().alert(
-        'Sync Shipments_UAE_EG → Inventory done.\n' +
-        'New OUT txns: ' + outCount + '\n' +
-        'New IN txns: ' + inCount
-      );
+      if (typeof safeAlert_ === 'function') {
+        safeAlert_(
+          'Sync Shipments_UAE_EG → Inventory done.\n' +
+          'New OUT txns: ' + outCount + '\n' +
+          'New IN txns: ' + inCount
+        );
+      } else {
+        Logger.log('Sync Shipments_UAE_EG → Inventory done. OUT=' + outCount + ', IN=' + inCount);
+      }
     };
 
     if (typeof withLock_ === 'function') {
