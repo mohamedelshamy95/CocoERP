@@ -820,8 +820,7 @@ function inv_rebuildAllSnapshots() {
     rebuildInventoryUAEFromLedger();
     rebuildInventoryEGFromLedger();
     if (typeof safeAlert_ === 'function') safeAlert_('Inventory snapshots rebuilt (UAE + EG).');
-    else Logger.log('Inventory snapshots rebuilt (UAE + EG).');
-  }
+    else Logger.log('Inventory snapshots rebuilt (UAE + EG).');}
 }
 
 /**
