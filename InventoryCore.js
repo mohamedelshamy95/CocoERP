@@ -519,6 +519,31 @@ function _inv_makeTxnId_(o) {
  * UAE warehouses only (names: "UAE" أو اللي بتبدأ بـ "UAE-").
  * كل مخزن (UAE-ATTIA / UAE-KOR / UAE-DXB) بيطلع في صف مستقل.
  */
+function _inv_normWh_(wh) {
+  return String(wh || '').trim().toUpperCase();
+}
+
+function _inv_isWhInList_(wh, list) {
+  const w = _inv_normWh_(wh);
+  if (!w) return false;
+  for (let i = 0; i < list.length; i++) {
+    if (_inv_normWh_(list[i]) === w) return true;
+  }
+  return false;
+}
+
+function _inv_isUaeWarehouse_(wh) {
+  const list = (APP.WAREHOUSE_GROUPS && APP.WAREHOUSE_GROUPS.UAE) ? APP.WAREHOUSE_GROUPS.UAE : ['UAE', 'UAE-DXB', 'UAE-KOR', 'UAE-ATTIA', 'KOR', 'ATTIA'];
+  const w = _inv_normWh_(wh);
+  return _inv_isWhInList_(w, list) || w.indexOf('UAE-') === 0;
+}
+
+function _inv_isEgWarehouse_(wh) {
+  const list = (APP.WAREHOUSE_GROUPS && APP.WAREHOUSE_GROUPS.EG) ? APP.WAREHOUSE_GROUPS.EG : ['EG-CAI', 'EG-TANTA', 'TAN-GH'];
+  const w = _inv_normWh_(wh);
+  return _inv_isWhInList_(w, list) || w.indexOf('EG') === 0;
+}
+
 function rebuildInventoryUAEFromLedger() {
   try {
     const ledgerSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS);
@@ -569,9 +594,7 @@ function rebuildInventoryUAEFromLedger() {
       if (!wh) return;
 
       const whUpper = wh.toUpperCase();
-      if (!(whUpper === 'UAE' || whUpper.indexOf('UAE-') === 0)) {
-        return; // مش مخزن إماراتي
-      }
+      if (!_inv_isUaeWarehouse_(wh)) { return; }
 
       const product   = row[idxProduct];
       const variant   = row[idxVariant];
@@ -699,7 +722,7 @@ function rebuildInventoryEGFromLedger() {
 
     data.forEach(row => {
       const wh = (row[idxWh] || '').toString().trim().toUpperCase();
-      if (!(wh.startsWith('EG'))) return; // مصر فقط
+      if (!_inv_isEgWarehouse_(wh)) return;
 
       const qtyIn  = Number(row[idxQtyIn] || 0);
       const qtyOut = Number(row[idxQtyOut] || 0);
@@ -796,10 +819,8 @@ function inv_rebuildAllSnapshots() {
   try {
     rebuildInventoryUAEFromLedger();
     rebuildInventoryEGFromLedger();
-    SpreadsheetApp.getUi().alert('Inventory snapshots (UAE + EG) rebuilt ✔️');
-  } catch (e) {
-    logError_('inv_rebuildAllSnapshots', e);
-    throw e;
+    if (typeof safeAlert_ === 'function') safeAlert_('Inventory snapshots rebuilt (UAE + EG).');
+    else Logger.log('Inventory snapshots rebuilt (UAE + EG).');
   }
 }
 
