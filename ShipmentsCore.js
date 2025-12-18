@@ -1310,37 +1310,57 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       throw new Error('Missing required QC_UAE columns (Order ID / SKU).');
     }
 
-    // Shipments map (prefer line-level)
-    const shipColShipId    = shipMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || shipMap['Shipment ID'];
-    const shipColOrderId   = shipMap[APP.COLS.SHIP_CN_UAE.ORDER_BATCH] || shipMap['Order ID (Batch)'] || shipMap['Order ID'];
-    const shipColSku       = shipMap[APP.COLS.SHIP_CN_UAE.SKU] || shipMap['SKU'];
-    const shipColVariant   = shipMap[APP.COLS.SHIP_CN_UAE.VARIANT] || shipMap['Variant / Color'];
-    const shipColLineId    = shipMap[APP.COLS.SHIP_CN_UAE.PURCHASE_LINE_ID] || shipMap['Purchases Line ID'];
+    // Shipments map (prefer line-level) + ARRIVED gate
+    const shipColShipId  = shipMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || shipMap['Shipment ID'];
+    const shipColOrderId = shipMap[APP.COLS.SHIP_CN_UAE.ORDER_BATCH] || shipMap['Order ID (Batch)'] || shipMap['Order ID'];
+    const shipColSku     = shipMap[APP.COLS.SHIP_CN_UAE.SKU] || shipMap['SKU'];
+    const shipColVariant = shipMap[APP.COLS.SHIP_CN_UAE.VARIANT] || shipMap['Variant / Color'];
+    const shipColLineId  = shipMap[APP.COLS.SHIP_CN_UAE.PURCHASE_LINE_ID] || shipMap['Purchases Line ID'];
+    const shipColStatus  = shipMap[APP.COLS.SHIP_CN_UAE.STATUS] || shipMap['Status'];
+    const shipColArrival = shipMap[APP.COLS.SHIP_CN_UAE.ARRIVAL] || shipMap['Actual Arrival'];
 
     const shipIdByLineId = {};
-    const shipIdByKey = {};
+    const shipIdByKey    = {};
+    
+   // Eligibility (only Arrived UAE lines / keys)
+   const arrivedShipIdByLineId = {};
+   const arrivedShipIdByKey    = {};
 
-    const shipLastRow = shipSh.getLastRow();
-    if (shipLastRow >= 2 && shipColShipId) {
-      const shipData = shipSh.getRange(2, 1, shipLastRow - 1, shipSh.getLastColumn()).getValues();
-      shipData.forEach(function (r) {
-        const sid = String(r[shipColShipId - 1] || '').trim();
-        if (!sid) return;
+   const shipLastRow = shipSh.getLastRow();
+   if (shipLastRow >= 2 && shipColShipId) {
+     const shipData = shipSh.getRange(2, 1, shipLastRow - 1, shipSh.getLastColumn()).getValues();
 
-        if (shipColLineId) {
-          const lid = String(r[shipColLineId - 1] || '').trim();
-          if (lid && !shipIdByLineId[lid]) shipIdByLineId[lid] = sid;
+     shipData.forEach(function (r) {
+       const sid = String(r[shipColShipId - 1] || '').trim();
+       if (!sid) return;
+
+       const oid = shipColOrderId ? String(r[shipColOrderId - 1] || '').trim() : '';
+       const sku = shipColSku ? String(r[shipColSku - 1] || '').trim() : '';
+       const v   = shipColVariant ? String(r[shipColVariant - 1] || '').trim() : '';
+
+       const status = shipColStatus ? String(r[shipColStatus - 1] || '').trim() : '';
+       const arrival = shipColArrival ? r[shipColArrival - 1] : null;
+
+       const isArrivedUAE = !!arrival || status === 'Arrived UAE';
+
+      // Line-level key
+      if (shipColLineId) {
+        const lid = String(r[shipColLineId - 1] || '').trim();
+        if (lid) {
+          if (!shipIdByLineId[lid]) shipIdByLineId[lid] = sid;
+          if (isArrivedUAE && !arrivedShipIdByLineId[lid]) arrivedShipIdByLineId[lid] = sid;
         }
+      }
 
-        const oid = shipColOrderId ? String(r[shipColOrderId - 1] || '').trim() : '';
-        const sku = shipColSku ? String(r[shipColSku - 1] || '').trim() : '';
-        const v   = shipColVariant ? String(r[shipColVariant - 1] || '').trim() : '';
-        if (oid && sku) {
-          const key = oid + '||' + sku + '||' + v;
-          if (!shipIdByKey[key]) shipIdByKey[key] = sid;
-        }
-      });
-    }
+     // Fallback key (order+sku+variant)
+     if (oid && sku) {
+       const key = oid + '||' + sku + '||' + v;
+       if (!shipIdByKey[key]) shipIdByKey[key] = sid;
+       if (isArrivedUAE && !arrivedShipIdByKey[key]) arrivedShipIdByKey[key] = sid;
+     }
+   });
+ }
+
 
     // QC sheet metadata
     const qcLastCol = qcSh.getLastColumn();
@@ -1430,7 +1450,12 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       const batch   = colBatch ? String(r[colBatch - 1] || '').trim() : '';
 
       const shipKey = orderId + '||' + sku + '||' + variant;
-      const shipId = (shipIdByLineId[lineId] || shipIdByKey[shipKey] || '');
+
+      // Only allow QC when Arrived UAE
+      const arrivedShipId = (arrivedShipIdByLineId[lineId] || arrivedShipIdByKey[shipKey] || '');
+      if (!arrivedShipId) return;
+
+      const shipId = arrivedShipId;
 
       const existingRow = existingByLineId[lineId];
       if (existingRow) {
