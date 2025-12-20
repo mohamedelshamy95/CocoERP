@@ -293,7 +293,7 @@ function syncSalesFromOrdersSheet() {
 
 const catBySku = {};
 if (catData.length && idxSkuCat >= 0) {
-  for (var i = 0; i < catData.length; i++) {
+  for (let i = 0; i < catData.length; i++) {
     const k = normSku_(catData[i][idxSkuCat]);
     if (!k) continue;
     if (!catBySku[k]) {

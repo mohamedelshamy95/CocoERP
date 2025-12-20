@@ -37,8 +37,8 @@ function orders_tryGetUi_() {
 }
 
 function orders_alert_(msg) {
-  var text = String(msg);
-  var ui = orders_tryGetUi_();
+  const text = String(msg);
+  const ui = orders_tryGetUi_();
   if (ui) {
     if (ui) ui.alert(text); else if (typeof safeAlert_ === 'function') safeAlert_(text); else Logger.log(text);
     return;
@@ -90,8 +90,17 @@ function setupOrdersLayoutHardReset() {
     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
     const ui = orders_tryGetUi_();
     if (!ui) throw new Error('This action requires UI (run from spreadsheet menu).');
-    const res = if (ui) ui.alert('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO); else if (typeof safeAlert_ === 'function') safeAlert_('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO); else Logger.log('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO);
-    if (res !== ui.Button.YES) return;
+    let res = null;
+
+    if (ui) {
+      res = ui.alert('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO);
+    } else {
+      Logger.log('WARN: UI not available; clear Orders confirmation skipped.');
+    }
+
+    const confirmed = !!ui && res === ui.Button.YES;
+    if (!confirmed) return;
+
 
     orders_removeFilterIfAny_(shO);
     shO.clear();

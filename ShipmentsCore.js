@@ -2160,7 +2160,7 @@ function syncShipmentsUaeEgToInventory() {
 
         // ===== Inventory info for this SKU+Warehouse =====
         const keyWh  = sku + '||' + fromWarehouse;
-        let info     = uaeByWh[keyWh] || uaeBySku[sku] || {};
+        const info     = uaeByWh[keyWh] || uaeBySku[sku] || {};
 
         // If Warehouse (UAE) is empty in sheet and inventory has a warehouse → fill it
         if (idxShipWhUae != null && !whCell && info.warehouse) {
@@ -2284,6 +2284,6 @@ function syncShipmentsUaeEgToInventory() {
  * Debug helper for Inventory lookup.
  */
 function debugTestInventoryLookup_() {
-  var info = _getInventoryUaeInfoForSku_('MONSTER-MQT65-PURPLE', 'UAE-DXB');
+  const info = _getInventoryUaeInfoForSku_('MONSTER-MQT65-PURPLE', 'UAE-DXB');
   Logger.log(JSON.stringify(info));
 }
