@@ -1,0 +1,14 @@
+﻿{
+  "name": "cocoerp",
+  "version": "2.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "lint": "eslint \"**/*.js\"",
+    "lint:fix": "eslint \"**/*.js\" --fix",
+    "check:syntax": "node --check .\\AppCore.js && node --check .\\Purchases.js && node --check .\\Orders.js && node --check .\\Logistics.js && node --check .\\ShipmentsCore.js && node --check .\\InventoryCore.js && node --check .\\CatalogCore.js && node --check .\\Sales.js && node --check .\\SkuUtils.js"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  }
+}

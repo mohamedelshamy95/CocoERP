@@ -1,5 +1,4 @@
 ﻿node_modules/
 npm-debug.log*
+.eslint-bundle.js
 .DS_Store
-Thumbs.db
-*.log

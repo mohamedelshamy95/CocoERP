@@ -1,0 +1,9 @@
+﻿**/node_modules/**
+**/.vscode/**
+package.json
+package-lock.json
+eslint.config.cjs
+jsconfig.json
+.gitignore
+README.md
+*.code-workspace
