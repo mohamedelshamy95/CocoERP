@@ -30,40 +30,40 @@ const APP = {
   // Legacy aliases are kept for backward compatibility (older data / older modules).
   WAREHOUSES: {
     // Canonical
-    KOR:     'KOR',
-    ATTIA:   'ATTIA',
-    TAN_GH:  'TAN-GH',
+    KOR: 'KOR',
+    ATTIA: 'ATTIA',
+    TAN_GH: 'TAN-GH',
 
     // Legacy (kept)
-    UAE_DXB:   'UAE-DXB',
+    UAE_DXB: 'UAE-DXB',
     UAE_ATTIA: 'UAE-ATTIA',
-    UAE_KOR:   'UAE-KOR',
-    EG_CAI:    'EG-CAI',
-    EG_TANTA:  'EG-TANTA'
+    UAE_KOR: 'UAE-KOR',
+    EG_CAI: 'EG-CAI',
+    EG_TANTA: 'EG-TANTA'
   },
 
   WAREHOUSE_GROUPS: {
     UAE: ['KOR', 'ATTIA', 'UAE-DXB', 'UAE-ATTIA', 'UAE-KOR'],
-    EG:  ['TAN-GH', 'EG-CAI', 'EG-TANTA']
+    EG: ['TAN-GH', 'EG-CAI', 'EG-TANTA']
   },
 
   SHEETS: {
     // Core
     PURCHASES: 'Purchases',
-    SETTINGS:  'Settings',
-    ORDERS:    'Orders',
+    SETTINGS: 'Settings',
+    ORDERS: 'Orders',
 
     // Logistics
-    QC_UAE:      'QC_UAE',
+    QC_UAE: 'QC_UAE',
     SHIP_CN_UAE: 'Shipments_CN_UAE',
     SHIP_UAE_EG: 'Shipments_UAE_EG',
 
     // Inventory
     INVENTORY_TXNS: 'Inventory_Transactions',
-    INVENTORY_UAE:  'Inventory_UAE',
-    INVENTORY_EG:   'Inventory_EG',
-    CATALOG_EG:     'Catalog_EG',
-    SKU_RATES:      'SKU_Rates',
+    INVENTORY_UAE: 'Inventory_UAE',
+    INVENTORY_EG: 'Inventory_EG',
+    CATALOG_EG: 'Catalog_EG',
+    SKU_RATES: 'SKU_Rates',
 
     // Sales
     SALES_EG: 'Sales_EG',
@@ -79,201 +79,201 @@ const APP = {
    */
   COLS: {
     PURCHASES: {
-      ORDER_ID:    'Order ID',
-      ORDER_DATE:  'Order Date',
-      PLATFORM:    'Platform',
-      SELLER:      'Seller Name',
-      SKU:         'SKU',
+      ORDER_ID: 'Order ID',
+      ORDER_DATE: 'Order Date',
+      PLATFORM: 'Platform',
+      SELLER: 'Seller Name',
+      SKU: 'SKU',
 
       // Canonical:
-      PRODUCT_NAME:'Product Name',
-      VARIANT:     'Variant / Color',
+      PRODUCT_NAME: 'Product Name',
+      VARIANT: 'Variant / Color',
 
       // Backward-compat aliases (do NOT use in new code):
-      PRODUCT:     'Product Name',       // legacy alias
+      PRODUCT: 'Product Name',       // legacy alias
       VARIANT_CLR: 'Variant / Color',    // legacy alias
 
-      BATCH_CODE:  'Batch Code',
-      LINE_ID:     'Line ID', 
-      QTY:         'Qty',
-      TOTAL_ORIG:  'Total Order (Orig)',
-      TOTAL_EGP:   'Order Total (EGP)',
+      BATCH_CODE: 'Batch Code',
+      LINE_ID: 'Line ID',
+      QTY: 'Qty',
+      TOTAL_ORIG: 'Total Order (Orig)',
+      TOTAL_EGP: 'Order Total (EGP)',
       LANDED_COST: 'Landed Cost (EGP)',
       UNIT_LANDED: 'Unit Landed Cost (EGP)',
-      CURRENCY:    'Currency',
-      BUYER_NAME:  'Buyer Name',
-      SHIP_EG:     'Ship UAE→EG (EGP)',
+      CURRENCY: 'Currency',
+      BUYER_NAME: 'Buyer Name',
+      SHIP_EG: 'Ship UAE→EG (EGP)',
       CUSTOMS_EGP: 'Customs/Fees (EGP)',
-      NOTES:       'Notes'
+      NOTES: 'Notes'
     },
 
     ORDERS: {
-      ORDER_ID:    'Order ID',
+      ORDER_ID: 'Order ID',
       TOTAL_LINES: 'Total Lines',
-      TOTAL_QTY:   'Total Qty',
-      TOTAL_ORIG:  'Total Order (Orig)',
-      TOTAL_EGP:   'Order Total (EGP)',
-      SHIP_EG:     'Ship UAE→EG (EGP)',
-      CUSTOMS:     'Customs/Fees (EGP)',
+      TOTAL_QTY: 'Total Qty',
+      TOTAL_ORIG: 'Total Order (Orig)',
+      TOTAL_EGP: 'Order Total (EGP)',
+      SHIP_EG: 'Ship UAE→EG (EGP)',
+      CUSTOMS: 'Customs/Fees (EGP)',
       LANDED_COST: 'Landed Cost (EGP)',
-      PROFIT_EGP:  'Profit (EGP)',
+      PROFIT_EGP: 'Profit (EGP)',
       UNIT_LANDED: 'Unit Landed Cost (EGP)'
     },
 
     QC_UAE: {
-      QC_ID:        'QC ID',
-      ORDER_ID:     'Order ID',
-      SHIPMENT_ID:  'Shipment CN→UAE ID',
-      SKU:          'SKU',
-      BATCH_CODE:   'Batch Code',
+      QC_ID: 'QC ID',
+      ORDER_ID: 'Order ID',
+      SHIPMENT_ID: 'Shipment CN→UAE ID',
+      SKU: 'SKU',
+      BATCH_CODE: 'Batch Code',
       PRODUCT_NAME: 'Product Name',
-      VARIANT:      'Variant / Color',
-      QTY_ORDERED:  'Qty Ordered',
-      QTY_RECEIVED:'Qty Received',
-      QTY_OK:       'Qty OK',
-      QTY_MISSING:  'Qty Missing',
-      QTY_DEFECT:   'Qty Defective',
-      QC_RESULT:    'QC Result',
-      QC_DATE:      'QC Date',
-      WAREHOUSE:    'Warehouse (UAE)',
+      VARIANT: 'Variant / Color',
+      QTY_ORDERED: 'Qty Ordered',
+      QTY_RECEIVED: 'Qty Received',
+      QTY_OK: 'Qty OK',
+      QTY_MISSING: 'Qty Missing',
+      QTY_DEFECT: 'Qty Defective',
+      QC_RESULT: 'QC Result',
+      QC_DATE: 'QC Date',
+      WAREHOUSE: 'Warehouse (UAE)',
       PURCHASE_LINE_ID: 'Purchases Line ID',
-      NOTES:        'Notes'
+      NOTES: 'Notes'
     },
 
     SHIP_CN_UAE: {
       SHIPMENT_ID: 'Shipment ID',
-      SUPPLIER:    'Supplier / Factory',
-      FORWARDER:   'Forwarder',
-      TRACKING:    'Tracking / Container',
+      SUPPLIER: 'Supplier / Factory',
+      FORWARDER: 'Forwarder',
+      TRACKING: 'Tracking / Container',
       ORDER_BATCH: 'Order ID (Batch)',
-      SHIP_DATE:   'Ship Date',
-      ETA:         'ETA',
-      ARRIVAL:     'Actual Arrival',
-      STATUS:      'Status',
-      SKU:         'SKU',
-      PRODUCT_NAME:'Product Name',
-      VARIANT:     'Variant / Color',
-      QTY:         'Qty',
-      WEIGHT:      'Gross Weight (kg)',
-      VOLUME:      'Volume (CBM)',
+      SHIP_DATE: 'Ship Date',
+      ETA: 'ETA',
+      ARRIVAL: 'Actual Arrival',
+      STATUS: 'Status',
+      SKU: 'SKU',
+      PRODUCT_NAME: 'Product Name',
+      VARIANT: 'Variant / Color',
+      QTY: 'Qty',
+      WEIGHT: 'Gross Weight (kg)',
+      VOLUME: 'Volume (CBM)',
       FREIGHT_AED: 'Freight (AED)',
-      OTHER_AED:   'Other Fees (AED)',
-      TOTAL_AED:   'Total Cost (AED)',
+      OTHER_AED: 'Other Fees (AED)',
+      TOTAL_AED: 'Total Cost (AED)',
       PURCHASE_LINE_ID: 'Purchases Line ID',
-      NOTES:       'Notes'
+      NOTES: 'Notes'
     },
 
     SHIP_UAE_EG: {
       SHIPMENT_ID: 'Shipment ID',
-      FORWARDER:   'Forwarder',
-      COURIER:     'Courier',
-      AWB:         'AWB / Tracking',
-      BOX_ID:      'Box ID',
-      SHIP_DATE:   'Ship Date',
-      ETA:         'ETA',
-      ARRIVAL:     'Actual Arrival',
-      STATUS:      'Status',
-      SKU:         'SKU',
-      PRODUCT_NAME:'Product Name',
-      VARIANT:     'Variant / Color',
-      QTY:         'Qty',
-      QTY_SYNCED:  'Qty Synced',
-      SHIP_COST:   'Ship Cost (EGP) – per unit or box',
-      CUSTOMS:     'Customs (EGP)',
-      OTHER:       'Other (EGP)',
-      TOTAL_COST:  'Total Cost (EGP)',
-      NOTES:       'Notes'
+      FORWARDER: 'Forwarder',
+      COURIER: 'Courier',
+      AWB: 'AWB / Tracking',
+      BOX_ID: 'Box ID',
+      SHIP_DATE: 'Ship Date',
+      ETA: 'ETA',
+      ARRIVAL: 'Actual Arrival',
+      STATUS: 'Status',
+      SKU: 'SKU',
+      PRODUCT_NAME: 'Product Name',
+      VARIANT: 'Variant / Color',
+      QTY: 'Qty',
+      QTY_SYNCED: 'Qty Synced',
+      SHIP_COST: 'Ship Cost (EGP) – per unit or box',
+      CUSTOMS: 'Customs (EGP)',
+      OTHER: 'Other (EGP)',
+      TOTAL_COST: 'Total Cost (EGP)',
+      NOTES: 'Notes'
     },
 
     INV_TXNS: {
-      TXN_ID:       'Txn ID',
-      TXN_DATE:     'Txn Date',
-      SOURCE_TYPE:  'Source Type',
-      SOURCE_ID:    'Source ID',
-      BATCH_CODE:   'Batch Code',
-      SKU:          'SKU',
+      TXN_ID: 'Txn ID',
+      TXN_DATE: 'Txn Date',
+      SOURCE_TYPE: 'Source Type',
+      SOURCE_ID: 'Source ID',
+      BATCH_CODE: 'Batch Code',
+      SKU: 'SKU',
       PRODUCT_NAME: 'Product Name',
-      VARIANT:      'Variant / Color',
-      WAREHOUSE:    'Warehouse',
-      QTY_IN:       'Qty In',
-      QTY_OUT:      'Qty Out',
-      UNIT_COST:    'Unit Cost (EGP)',
-      TOTAL_COST:   'Total Cost (EGP)',
-      CURRENCY:     'Currency',
-      UNIT_PRICE_ORIG:'Unit Price (Orig)',
-      NOTES:        'Notes'
+      VARIANT: 'Variant / Color',
+      WAREHOUSE: 'Warehouse',
+      QTY_IN: 'Qty In',
+      QTY_OUT: 'Qty Out',
+      UNIT_COST: 'Unit Cost (EGP)',
+      TOTAL_COST: 'Total Cost (EGP)',
+      CURRENCY: 'Currency',
+      UNIT_PRICE_ORIG: 'Unit Price (Orig)',
+      NOTES: 'Notes'
     },
 
     INV_UAE: {
-      SKU:         'SKU',
-      PRODUCT_NAME:'Product Name',
-      VARIANT:     'Variant / Color',
-      WAREHOUSE:   'Warehouse (UAE)',
-      ON_HAND:     'On Hand Qty',
-      ALLOCATED:   'Allocated Qty',
-      AVAILABLE:   'Available Qty',
-      AVG_COST:    'Avg Cost (EGP)',
-      TOTAL_COST:  'Total Cost (EGP)',
-      LAST_TXN:    'Last Txn Date',
-      LAST_SRC_TYPE:'Last Source Type',
+      SKU: 'SKU',
+      PRODUCT_NAME: 'Product Name',
+      VARIANT: 'Variant / Color',
+      WAREHOUSE: 'Warehouse (UAE)',
+      ON_HAND: 'On Hand Qty',
+      ALLOCATED: 'Allocated Qty',
+      AVAILABLE: 'Available Qty',
+      AVG_COST: 'Avg Cost (EGP)',
+      TOTAL_COST: 'Total Cost (EGP)',
+      LAST_TXN: 'Last Txn Date',
+      LAST_SRC_TYPE: 'Last Source Type',
       LAST_SRC_ID: 'Last Source ID'
     },
 
     INV_EG: {
-      SKU:         'SKU',
-      PRODUCT_NAME:'Product Name',
-      VARIANT:     'Variant / Color',
-      WAREHOUSE:   'Warehouse (EG)',
-      ON_HAND:     'On Hand Qty',
-      ALLOCATED:   'Allocated Qty',
-      AVAILABLE:   'Available Qty',
-      AVG_COST:    'Avg Cost (EGP)',
-      TOTAL_COST:  'Total Cost (EGP)',
-      LAST_TXN:    'Last Txn Date',
-      LAST_SRC_TYPE:'Last Source Type',
+      SKU: 'SKU',
+      PRODUCT_NAME: 'Product Name',
+      VARIANT: 'Variant / Color',
+      WAREHOUSE: 'Warehouse (EG)',
+      ON_HAND: 'On Hand Qty',
+      ALLOCATED: 'Allocated Qty',
+      AVAILABLE: 'Available Qty',
+      AVG_COST: 'Avg Cost (EGP)',
+      TOTAL_COST: 'Total Cost (EGP)',
+      LAST_TXN: 'Last Txn Date',
+      LAST_SRC_TYPE: 'Last Source Type',
       LAST_SRC_ID: 'Last Source ID'
     },
 
     CATALOG_EG: {
-      SKU:          'SKU',
+      SKU: 'SKU',
       PRODUCT_NAME: 'Product Name',
-      VARIANT:      'Variant / Color',
-      COLOR_GROUP:  'Color Group',
-      BRAND:        'Brand',
-      CATEGORY:     'Category',
-      SUBCATEGORY:  'Subcategory',
-      STATUS:       'Status',
+      VARIANT: 'Variant / Color',
+      COLOR_GROUP: 'Color Group',
+      BRAND: 'Brand',
+      CATEGORY: 'Category',
+      SUBCATEGORY: 'Subcategory',
+      STATUS: 'Status',
       DEFAULT_COST: 'Default Cost (EGP)',
-      DEFAULT_PRICE:'Default Price (EGP)',
-      BARCODE:      'Barcode',
-      NOTES:        'Notes'
+      DEFAULT_PRICE: 'Default Price (EGP)',
+      BARCODE: 'Barcode',
+      NOTES: 'Notes'
     },
 
     SALES_EG: {
-      ORDER_ID:       'Order ID',
-      ORDER_DATE:     'Order Date',
-      PLATFORM:       'Platform',
-      CUSTOMER_NAME:  'Customer Name',
-      PHONE:          'Phone',
-      CITY:           'City',
-      ADDRESS:        'Address',
-      SKU:            'SKU',
-      PRODUCT_NAME:   'Product Name',
-      VARIANT:        'Variant / Color',
-      WAREHOUSE:      'Warehouse (EG)',
-      QTY:            'Qty',
-      UNIT_PRICE:     'Unit Price (EGP)',
-      TOTAL_PRICE:    'Total Price (EGP)',
-      DISCOUNT:       'Discount (EGP)',
-      NET_REVENUE:    'Net Revenue (EGP)',
-      SHIPPING_FEE:   'Shipping Fee (EGP)',
+      ORDER_ID: 'Order ID',
+      ORDER_DATE: 'Order Date',
+      PLATFORM: 'Platform',
+      CUSTOMER_NAME: 'Customer Name',
+      PHONE: 'Phone',
+      CITY: 'City',
+      ADDRESS: 'Address',
+      SKU: 'SKU',
+      PRODUCT_NAME: 'Product Name',
+      VARIANT: 'Variant / Color',
+      WAREHOUSE: 'Warehouse (EG)',
+      QTY: 'Qty',
+      UNIT_PRICE: 'Unit Price (EGP)',
+      TOTAL_PRICE: 'Total Price (EGP)',
+      DISCOUNT: 'Discount (EGP)',
+      NET_REVENUE: 'Net Revenue (EGP)',
+      SHIPPING_FEE: 'Shipping Fee (EGP)',
       PAYMENT_METHOD: 'Payment Method',
-      ORDER_STATUS:   'Order Status',
+      ORDER_STATUS: 'Order Status',
       DELIVERED_DATE: 'Delivered Date',
-      NOTES:          'Notes',
-      SOURCE:         'Source',
-      COURIER:        'Courier',
-      AWB:            'AWB'
+      NOTES: 'Notes',
+      SOURCE: 'Source',
+      COURIER: 'Courier',
+      AWB: 'AWB'
     }
   },
 
@@ -292,7 +292,7 @@ const APP = {
     'Ship Cost (EGP) — per unit or box': 'Ship Cost (EGP) – per unit or box',
     'Ship Cost (EGP) — per unit': 'Ship Cost (EGP) – per unit',
     'Qty (pcs)': 'Qty',
-// Arabic common variants (status)
+    // Arabic common variants (status)
     'تم التسليم': 'Delivered',
     'تم التوصيل': 'Delivered',
     'تم التسليم للعميل': 'Delivered'
@@ -301,51 +301,51 @@ const APP = {
   SETTINGS_KEYS: {
     DEFAULT_CURRENCY: 'Default Currency',
     FX_CNY_EGP: 'FX CNY→EGP',
-    FX_AED_EGP:        'Default FX AED→EGP',
+    FX_AED_EGP: 'Default FX AED→EGP',
     SHIP_UAE_EG_ORDER: 'Default Ship UAE→EG (EGP) / order',
-    CUSTOMS_PCT:       'Default Customs % (e.g. 0.20 = 20%)'
+    CUSTOMS_PCT: 'Default Customs % (e.g. 0.20 = 20%)'
   },
 
   SETTINGS_LIST_HEADERS: {
-    PLATFORMS:        'Platforms',
-    PAYMENT_METHODS:  'Payment Methods',
-    CURRENCIES:       'Currencies',
-    STORES:           'Stores (optional)',
-    WAREHOUSES:       'Warehouses'
+    PLATFORMS: 'Platforms',
+    PAYMENT_METHODS: 'Payment Methods',
+    CURRENCIES: 'Currencies',
+    STORES: 'Stores (optional)',
+    WAREHOUSES: 'Warehouses'
   },
 
   INTERNAL: {
-  SETTINGS_CACHE_KEY: 'CocoERP_SettingsMap_v1',
-  USE_INSTALLABLE_ONEDIT_PROP: 'CocoERP_UseInstallableOnEdit',
+    SETTINGS_CACHE_KEY: 'CocoERP_SettingsMap_v1',
+    USE_INSTALLABLE_ONEDIT_PROP: 'CocoERP_UseInstallableOnEdit',
 
-  // Orders sync queue (Purchases → Orders)
-  ORDERS_SYNC_QUEUE_KEY: 'CocoERP_OrdersSyncQueue_v1',
-  ORDERS_SYNC_ALL_FLAG: 'CocoERP_OrdersSyncAllFlag_v1',
-  ORDERS_SYNC_LAST_RUN: 'CocoERP_OrdersSyncLastRun_v1',
-  ORDERS_SYNC_LAST_ERROR:'CocoERP_OrdersSyncLastError_v1',
+    // Orders sync queue (Purchases → Orders)
+    ORDERS_SYNC_QUEUE_KEY: 'CocoERP_OrdersSyncQueue_v1',
+    ORDERS_SYNC_ALL_FLAG: 'CocoERP_OrdersSyncAllFlag_v1',
+    ORDERS_SYNC_LAST_RUN: 'CocoERP_OrdersSyncLastRun_v1',
+    ORDERS_SYNC_LAST_ERROR: 'CocoERP_OrdersSyncLastError_v1',
 
-  // QC generation queue (Purchases → QC_UAE)
-  QC_GEN_QUEUE_KEY: 'CocoERP_QcGenQueue_v1',
-  QC_GEN_ALL_FLAG: 'CocoERP_QcGenAllFlag_v1',
-  QC_GEN_LAST_RUN: 'CocoERP_QcGenLastRun_v1',
-  QC_GEN_LAST_ERROR:'CocoERP_QcGenLastError_v1',
+    // QC generation queue (Purchases → QC_UAE)
+    QC_GEN_QUEUE_KEY: 'CocoERP_QcGenQueue_v1',
+    QC_GEN_ALL_FLAG: 'CocoERP_QcGenAllFlag_v1',
+    QC_GEN_LAST_RUN: 'CocoERP_QcGenLastRun_v1',
+    QC_GEN_LAST_ERROR: 'CocoERP_QcGenLastError_v1',
 
-  // Shipments CN→UAE sync flag (Purchases → Shipments_CN_UAE)
-  SHIP_CN_UAE_SYNC_FLAG: 'CocoERP_ShipCnUaeSyncFlag_v1',
-  SHIP_CN_UAE_LAST_RUN: 'CocoERP_ShipCnUaeLastRun_v1',
-  SHIP_CN_UAE_LAST_ERROR:'CocoERP_ShipCnUaeLastError_v1', 
-  
-  // QC → Inventory sync flag
-  QC_INV_SYNC_FLAG: 'CocoERP_QcInvSyncFlag_v1',
-  QC_INV_LAST_RUN: 'CocoERP_QcInvLastRun_v1',
-  QC_INV_LAST_ERROR: 'CocoERP_QcInvLastError_v1',
+    // Shipments CN→UAE sync flag (Purchases → Shipments_CN_UAE)
+    SHIP_CN_UAE_SYNC_FLAG: 'CocoERP_ShipCnUaeSyncFlag_v1',
+    SHIP_CN_UAE_LAST_RUN: 'CocoERP_ShipCnUaeLastRun_v1',
+    SHIP_CN_UAE_LAST_ERROR: 'CocoERP_ShipCnUaeLastError_v1',
 
-  // Shipments UAE→EG → Inventory sync flag
-  SHIP_UAE_EG_INV_SYNC_FLAG: 'CocoERP_ShipUaeEgInvSyncFlag_v1',
-  SHIP_UAE_EG_INV_LAST_RUN: 'CocoERP_ShipUaeEgInvLastRun_v1',
-  SHIP_UAE_EG_INV_LAST_ERROR: 'CocoERP_ShipUaeEgInvLastError_v1'
-  
-}
+    // QC → Inventory sync flag
+    QC_INV_SYNC_FLAG: 'CocoERP_QcInvSyncFlag_v1',
+    QC_INV_LAST_RUN: 'CocoERP_QcInvLastRun_v1',
+    QC_INV_LAST_ERROR: 'CocoERP_QcInvLastError_v1',
+
+    // Shipments UAE→EG → Inventory sync flag
+    SHIP_UAE_EG_INV_SYNC_FLAG: 'CocoERP_ShipUaeEgInvSyncFlag_v1',
+    SHIP_UAE_EG_INV_LAST_RUN: 'CocoERP_ShipUaeEgInvLastRun_v1',
+    SHIP_UAE_EG_INV_LAST_ERROR: 'CocoERP_ShipUaeEgInvLastError_v1'
+
+  }
 };
 
 /** ===================== CORE HELPERS ===================== */
@@ -441,10 +441,10 @@ function ensureSheetSchema_(sheetName, headers, opts) {
 }
 
 function normalizeHeaders_(sh, headerRow) {
-  
+
   // Normalize common punctuation differences (en/em dash -> hyphen)
   const _canon_ = (v) => String(v || '').replace(/[\u2013\u2014]/g, '-').trim();
-const row = headerRow || 1;
+  const row = headerRow || 1;
   const lastCol = sh.getLastColumn();
   if (lastCol === 0) return;
 
@@ -499,12 +499,38 @@ function logError_(fnName, error, context) {
 
 /** ===================== LOCKING / SAFETY ===================== */
 
+var __COCO_LOCK_DEPTH__ = 0;
+
+/**
++ * Runs a function under a document lock.
++ *
++ * NOTE (important): LockService locks are NOT re-entrant. Because we sometimes compose
++ * locked functions (e.g., coco_processSyncQueue → locked stage functions), we treat
++ * nested calls within the same execution as re-entrant and reuse the already-held lock.
+ */
 function withLock_(lockName, fn) {
   const lock = LockService.getDocumentLock();
+
+  // Re-entrant within the same execution (do NOT try to re-acquire the lock).
+  if (__COCO_LOCK_DEPTH__ > 0) {
+    __COCO_LOCK_DEPTH__++;
+    try {
+      return fn();
+    } finally {
+      __COCO_LOCK_DEPTH__--;
+    }
+  }
+
   const ok = lock.tryLock(25 * 1000);
   if (!ok) throw new Error('Could not acquire lock: ' + (lockName || 'DocumentLock'));
-  try { return fn(); }
-  finally { lock.releaseLock(); }
+
+  __COCO_LOCK_DEPTH__ = 1;
+  try {
+    return fn();
+  } finally {
+    __COCO_LOCK_DEPTH__ = 0;
+    try { lock.releaseLock(); } catch (e) { }
+  }
 }
 
 /**
@@ -544,11 +570,47 @@ function isDeliveredStatus_(status) {
   return false;
 }
 
-function safeAlert_(msg) {
+function safeAlert_(msg, title) {
   try {
-    SpreadsheetApp.getUi().alert(String(msg));
+    const ui = SpreadsheetApp.getUi();
+    ui.alert(title || 'CocoERP', String(msg));
   } catch (e) {
-    Logger.log(String(msg));
+    Logger.log((title ? title + ': ' : '') + String(msg));
+  }
+}
+
+
+/**
+ * Trigger-safe confirm dialog.
+ * - In manual UI context: shows OK/CANCEL and returns true/false.
+ * - In trigger/automation context: returns false.
+ */
+function safeConfirm_(title, message) {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const resp = ui.alert(String(title || 'Confirm'), String(message || ''), ui.ButtonSet.OK_CANCEL);
+    return resp === ui.Button.OK;
+  } catch (e) {
+    // No UI available (e.g., installable triggers). Fail safe.
+    return false;
+  }
+}
+
+/**
+ * Trigger-safe prompt.
+ * - In manual UI context: returns trimmed text (may be empty string).
+ * - If user cancels OR UI unavailable: returns null.
+ */
+function safePromptText_(title, message) {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const resp = ui.prompt(String(title || 'Input'), String(message || ''), ui.ButtonSet.OK_CANCEL);
+    if (resp.getSelectedButton() !== ui.Button.OK) return null;
+    const t = resp.getResponseText();
+    return (t == null) ? '' : String(t).trim();
+  } catch (e) {
+    // No UI available (e.g., installable triggers).
+    return null;
   }
 }
 
@@ -624,7 +686,7 @@ function ensureSettingsSheet_() {
         sh.getRange(2, whCol, desired.length, 1).setValues(desired.map(function (v) { return [v]; }));
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 
   return sh;
 }
@@ -632,7 +694,7 @@ function ensureSettingsSheet_() {
 function clearSettingsCache_() {
   try {
     CacheService.getDocumentCache().remove('CocoERP_SettingsMap_v1');
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function getSettingsMap_() {
@@ -641,7 +703,7 @@ function getSettingsMap_() {
 
   const cached = cache.get(cacheKey);
   if (cached) {
-    try { return JSON.parse(cached); } catch (e) {}
+    try { return JSON.parse(cached); } catch (e) { }
   }
 
   const sh = ensureSettingsSheet_();
@@ -799,10 +861,10 @@ function coco_preflightAndRepair() {
       ensureInventoryTxnHeader_();
 
       ensureSheetSchema_(APP.SHEETS.INVENTORY_UAE, Object.keys(APP.COLS.INV_UAE).map(function (k) { return APP.COLS.INV_UAE[k]; }), { addMissing: true });
-      ensureSheetSchema_(APP.SHEETS.INVENTORY_EG,  Object.keys(APP.COLS.INV_EG).map(function (k) { return APP.COLS.INV_EG[k]; }),  { addMissing: true });
+      ensureSheetSchema_(APP.SHEETS.INVENTORY_EG, Object.keys(APP.COLS.INV_EG).map(function (k) { return APP.COLS.INV_EG[k]; }), { addMissing: true });
 
       ensureSheetSchema_(APP.SHEETS.CATALOG_EG, Object.keys(APP.COLS.CATALOG_EG).map(function (k) { return APP.COLS.CATALOG_EG[k]; }), { addMissing: true });
-      ensureSheetSchema_(APP.SHEETS.SALES_EG,   Object.keys(APP.COLS.SALES_EG).map(function (k) { return APP.COLS.SALES_EG[k]; }),   { addMissing: true });
+      ensureSheetSchema_(APP.SHEETS.SALES_EG, Object.keys(APP.COLS.SALES_EG).map(function (k) { return APP.COLS.SALES_EG[k]; }), { addMissing: true });
 
       safeAlert_('✅ Preflight + Repair completed.');
     } catch (err) {
@@ -822,26 +884,26 @@ function _coco_bootstrapLayoutsIfMissingHeaders_() {
   // Purchases & Orders
   if (_sheetHeaderEmpty_(APP.SHEETS.PURCHASES) && typeof setupPurchasesLayout === 'function') setupPurchasesLayout();
   if (_sheetHeaderEmpty_(APP.SHEETS.PURCHASES) && typeof installPurchasesFormulas === 'function') installPurchasesFormulas();
-  if (_sheetHeaderEmpty_(APP.SHEETS.ORDERS)    && typeof setupOrdersLayout === 'function')    setupOrdersLayout();
+  if (_sheetHeaderEmpty_(APP.SHEETS.ORDERS) && typeof setupOrdersLayout === 'function') setupOrdersLayout();
 
   // Logistics / QC / Shipments
   // Prefer the unified layout installer if available.
   if ((_sheetHeaderEmpty_(APP.SHEETS.QC_UAE) || _sheetHeaderEmpty_(APP.SHEETS.SHIP_CN_UAE) || _sheetHeaderEmpty_(APP.SHEETS.SHIP_UAE_EG)) &&
-      typeof setupLogisticsLayout === 'function') {
+    typeof setupLogisticsLayout === 'function') {
     setupLogisticsLayout();
   } else {
     if (_sheetHeaderEmpty_(APP.SHEETS.QC_UAE) && typeof setupQcLayout === 'function') setupQcLayout();
     if ((_sheetHeaderEmpty_(APP.SHEETS.SHIP_CN_UAE) || _sheetHeaderEmpty_(APP.SHEETS.SHIP_UAE_EG)) &&
-        typeof setupShipmentsLayouts === 'function') setupShipmentsLayouts();
+      typeof setupShipmentsLayouts === 'function') setupShipmentsLayouts();
   }
 
   // Inventory core
   if ((_sheetHeaderEmpty_(APP.SHEETS.INVENTORY_TXNS) || _sheetHeaderEmpty_(APP.SHEETS.INVENTORY_UAE) || _sheetHeaderEmpty_(APP.SHEETS.INVENTORY_EG)) &&
-      typeof setupInventoryCoreLayout === 'function') setupInventoryCoreLayout();
+    typeof setupInventoryCoreLayout === 'function') setupInventoryCoreLayout();
 
   // Catalog & Sales
   if (_sheetHeaderEmpty_(APP.SHEETS.CATALOG_EG) && typeof setupCatalogEgLayout === 'function') setupCatalogEgLayout();
-  if (_sheetHeaderEmpty_(APP.SHEETS.SALES_EG)   && typeof setupSalesLayout === 'function')     setupSalesLayout();
+  if (_sheetHeaderEmpty_(APP.SHEETS.SALES_EG) && typeof setupSalesLayout === 'function') setupSalesLayout();
 }
 
 function _sheetHeaderEmpty_(sheetName, headerRow) {
@@ -873,37 +935,37 @@ function onOpen(e) {
     )
     .addSubMenu(
       ui.createMenu('Purchases & Orders')
-        .addItem('Setup Purchases Layout',     'setupPurchasesLayout')
+        .addItem('Setup Purchases Layout', 'setupPurchasesLayout')
         .addItem('Install Purchases Formulas', 'installPurchasesFormulas')
         .addSeparator()
-        .addItem('Setup Orders Layout',        'setupOrdersLayout')
-        .addItem('Rebuild Orders Summary',     'rebuildOrdersSummary')
-        .addItem('Process Sync Queue Now',   'coco_processSyncQueueNow')
+        .addItem('Setup Orders Layout', 'setupOrdersLayout')
+        .addItem('Rebuild Orders Summary', 'rebuildOrdersSummary')
+        .addItem('Process Sync Queue Now', 'coco_processSyncQueueNow')
         .addItem('Debug Orders Sync Status', 'coco_debugOrdersSyncStatus')
     )
     .addSubMenu(
       ui.createMenu('Logistics & QC')
-        .addItem('Setup QC Layout',               'setupQcLayout')
-        .addItem('Setup Shipments Layouts',       'setupShipmentsLayouts')
+        .addItem('Setup QC Layout', 'setupQcLayout')
+        .addItem('Setup Shipments Layouts', 'setupShipmentsLayouts')
         .addSeparator()
-        .addItem('Generate QC from Purchases…',   'qc_generateFromPurchasesPrompt')
+        .addItem('Generate QC from Purchases…', 'qc_generateFromPurchasesPrompt')
         .addItem('Recalc QC Quantities & Result', 'qc_recalcQuantitiesAndResult')
-        .addItem('Backfill Purchases SKU',        'sku_backfillPurchasesSku')
+        .addItem('Backfill Purchases SKU', 'sku_backfillPurchasesSku')
     )
     .addSubMenu(
       ui.createMenu('Inventory')
         .addItem('Setup Inventory Core Layout', 'setupInventoryCoreLayout')
         .addItem('Rebuild Inventory Snapshots', 'inv_rebuildAllSnapshots')
         .addSeparator()
-        .addItem('Sync QC → Inventory (UAE)',   'syncQCtoInventory_UAE')
-        .addItem('Sync Shipments UAE→EG',       'syncShipmentsUaeEgToInventory')
+        .addItem('Sync QC → Inventory (UAE)', 'syncQCtoInventory_UAE')
+        .addItem('Sync Shipments UAE→EG', 'syncShipmentsUaeEgToInventory')
         .addSeparator()
         .addItem('Full Rebuild from Logistics', 'inv_fullRebuildFromLogistics')
     );
 
   if (typeof setupSalesLayout === 'function' ||
-      typeof syncSalesFromOrdersSheet === 'function' ||
-      typeof syncSalesEgToInventory === 'function') {
+    typeof syncSalesFromOrdersSheet === 'function' ||
+    typeof syncSalesEgToInventory === 'function') {
 
     const salesMenu = ui.createMenu('Sales & Revenue');
 
@@ -944,7 +1006,7 @@ function _dispatchOnEdit_(e) {
   if (!e || !e.range) return;
 
   const sheet = e.range.getSheet();
-  const name  = sheet.getName();
+  const name = sheet.getName();
 
   // Settings edits -> invalidate cache only (A/B area).
   // We keep this light to avoid expensive recalcs on every Settings tweak.
@@ -954,7 +1016,7 @@ function _dispatchOnEdit_(e) {
     return;
   }
 
-    // Purchases: fast defaults + SKU + enqueue Orders sync (debounced).
+  // Purchases: fast defaults + SKU + enqueue Orders sync (debounced).
   // IMPORTANT: Do not early-return after SKU only, otherwise FX/Ship/Customs & Orders sync will stop.
   if (name === APP.SHEETS.PURCHASES) {
     try { if (typeof purchasesOnEditDefaults_ === 'function') purchasesOnEditDefaults_(e); } catch (err) {
@@ -1011,9 +1073,9 @@ function coco_enqueueQcGenFromShipmentsCnUaeEdit_(e) {
 
   const map = getHeaderMap_(sh, 1);
 
-  const cOrder   = map[APP.COLS.SHIP_CN_UAE.ORDER_BATCH] || map['Order ID (Batch)'] || map['Order ID'];
+  const cOrder = map[APP.COLS.SHIP_CN_UAE.ORDER_BATCH] || map['Order ID (Batch)'] || map['Order ID'];
   const cArrival = map[APP.COLS.SHIP_CN_UAE.ARRIVAL] || map['Actual Arrival'];
-  const cStatus  = map[APP.COLS.SHIP_CN_UAE.STATUS] || map['Status'];
+  const cStatus = map[APP.COLS.SHIP_CN_UAE.STATUS] || map['Status'];
 
   if (!cOrder) return;
 
@@ -1036,9 +1098,9 @@ function coco_enqueueQcGenFromShipmentsCnUaeEdit_(e) {
   const n = Math.max(0, endRow - startRow + 1);
   if (n <= 0) return;
 
-  const orderVals  = sh.getRange(startRow, cOrder, n, 1).getValues();
+  const orderVals = sh.getRange(startRow, cOrder, n, 1).getValues();
   const statusVals = cStatus ? sh.getRange(startRow, cStatus, n, 1).getValues() : null;
-  const arrVals    = cArrival ? sh.getRange(startRow, cArrival, n, 1).getValues() : null;
+  const arrVals = cArrival ? sh.getRange(startRow, cArrival, n, 1).getValues() : null;
 
   const set = {};
   for (let i = 0; i < n; i++) {
@@ -1067,7 +1129,7 @@ function onEdit(e) {
   } catch (err) {
     logError_('onEdit', err, {
       sheet: e && e.range && e.range.getSheet().getName(),
-      a1:    e && e.range && e.range.getA1Notation()
+      a1: e && e.range && e.range.getA1Notation()
     });
   }
 }
@@ -1080,7 +1142,7 @@ function coco_onEditInstallable(e) {
   } catch (err) {
     logError_('coco_onEditInstallable', err, {
       sheet: e && e.range && e.range.getSheet().getName(),
-      a1:    e && e.range && e.range.getA1Notation()
+      a1: e && e.range && e.range.getA1Notation()
     });
   }
 }
@@ -1107,7 +1169,7 @@ function coco_installTriggers() {
       try {
         const dp = PropertiesService.getDocumentProperties();
         dp.deleteProperty('undefined');
-      } catch (e) {}
+      } catch (e) { }
 
       const ss = getSpreadsheet_();
 
@@ -1134,7 +1196,7 @@ function coco_uninstallTriggers() {
       try {
         const dp = PropertiesService.getDocumentProperties();
         dp.deleteProperty('undefined');
-      } catch (e) {}
+      } catch (e) { }
       _setUseInstallableOnEditFlag_(false);
       safeAlert_('✅ Installable triggers removed.');
     } catch (err) {
@@ -1170,7 +1232,7 @@ function runCoreTests() {
 function deepFreeze_(obj) {
   if (!obj || typeof obj !== 'object' || Object.isFrozen(obj)) return obj;
   Object.getOwnPropertyNames(obj).forEach(function (p) {
-    try { deepFreeze_(obj[p]); } catch (e) {}
+    try { deepFreeze_(obj[p]); } catch (e) { }
   });
   return Object.freeze(obj);
 }
@@ -1332,12 +1394,12 @@ function coco_enqueueQcGenFromPurchasesEdit_(e) {
   }
 
   const map = getHeaderMap_(sh, 1);
-  const cOrder  = map[APP.COLS.PURCHASES.ORDER_ID] || map['Order ID'];
-  const cSku    = map[APP.COLS.PURCHASES.SKU] || map['SKU'];
-  const cQty    = map[APP.COLS.PURCHASES.QTY] || map['Qty'];
+  const cOrder = map[APP.COLS.PURCHASES.ORDER_ID] || map['Order ID'];
+  const cSku = map[APP.COLS.PURCHASES.SKU] || map['SKU'];
+  const cQty = map[APP.COLS.PURCHASES.QTY] || map['Qty'];
   const cLineId = map[APP.COLS.PURCHASES.LINE_ID] || map['Line ID'];
-  const cProd   = map[APP.COLS.PURCHASES.PRODUCT_NAME] || map['Product Name'];
-  const cVar    = map[APP.COLS.PURCHASES.VARIANT] || map['Variant / Color'];
+  const cProd = map[APP.COLS.PURCHASES.PRODUCT_NAME] || map['Product Name'];
+  const cVar = map[APP.COLS.PURCHASES.VARIANT] || map['Variant / Color'];
 
   if (!cOrder) return;
 
@@ -1377,9 +1439,9 @@ function coco_flagShipmentsCnUaeSyncFromPurchasesEdit_(e) {
   const nc = e.range.getNumColumns();
 
   const map = getHeaderMap_(sh, 1);
-  const cOrder  = map[APP.COLS.PURCHASES.ORDER_ID] || map['Order ID'];
-  const cSku    = map[APP.COLS.PURCHASES.SKU] || map['SKU'];
-  const cQty    = map[APP.COLS.PURCHASES.QTY] || map['Qty'];
+  const cOrder = map[APP.COLS.PURCHASES.ORDER_ID] || map['Order ID'];
+  const cSku = map[APP.COLS.PURCHASES.SKU] || map['SKU'];
+  const cQty = map[APP.COLS.PURCHASES.QTY] || map['Qty'];
   const cLineId = map[APP.COLS.PURCHASES.LINE_ID] || map['Line ID'];
 
   // If we can't resolve core cols, still allow a conservative flag on huge pastes
@@ -1500,9 +1562,9 @@ function coco_processSyncQueue() {
     dp.deleteProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY);
     dp.deleteProperty(APP.INTERNAL.SHIP_CN_UAE_SYNC_FLAG);
 
-    try { dp.deleteProperty(APP.INTERNAL.ORDERS_SYNC_LAST_ERROR); } catch (e) {}
-    try { dp.deleteProperty(APP.INTERNAL.QC_GEN_LAST_ERROR); } catch (e) {}
-    try { dp.deleteProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_ERROR); } catch (e) {}
+    try { dp.deleteProperty(APP.INTERNAL.ORDERS_SYNC_LAST_ERROR); } catch (e) { }
+    try { dp.deleteProperty(APP.INTERNAL.QC_GEN_LAST_ERROR); } catch (e) { }
+    try { dp.deleteProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_ERROR); } catch (e) { }
 
     let stage = 'init';
 
@@ -1512,7 +1574,7 @@ function coco_processSyncQueue() {
       if (snapshot.shipFlag === '1') {
         if (typeof syncPurchasesToShipmentsCnUae === 'function') {
           syncPurchasesToShipmentsCnUae();
-          try { dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_RUN, new Date().toISOString()); } catch (e) {}
+          try { dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_RUN, new Date().toISOString()); } catch (e) { }
         } else {
           // Keep flag for retry and record error
           dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_SYNC_FLAG, '1');
@@ -1525,8 +1587,8 @@ function coco_processSyncQueue() {
       if (snapshot.qcForceAll === '1') {
         if (typeof qc_generateFromPurchases_ === 'function') {
           qc_generateFromPurchases_();
-          try { dp.setProperty(APP.INTERNAL.QC_GEN_LAST_RUN, new Date().toISOString()); } catch (e) {}
-          try { dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); } catch (e) {}
+          try { dp.setProperty(APP.INTERNAL.QC_GEN_LAST_RUN, new Date().toISOString()); } catch (e) { }
+          try { dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); } catch (e) { }
         } else {
           dp.setProperty(APP.INTERNAL.QC_GEN_ALL_FLAG, '1');
           dp.setProperty(APP.INTERNAL.QC_GEN_LAST_ERROR, 'qc_generateFromPurchases_ is not defined.');
@@ -1543,8 +1605,8 @@ function coco_processSyncQueue() {
 
           if (typeof qc_generateFromPurchases_ === 'function') {
             qc_generateFromPurchases_(batch);
-            try { dp.setProperty(APP.INTERNAL.QC_GEN_LAST_RUN, new Date().toISOString()); } catch (e) {}
-            try { dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); } catch (e) {}
+            try { dp.setProperty(APP.INTERNAL.QC_GEN_LAST_RUN, new Date().toISOString()); } catch (e) { }
+            try { dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); } catch (e) { }
           } else {
             // restore queue for retry
             dp.setProperty(APP.INTERNAL.QC_GEN_QUEUE_KEY, snapshot.qcRaw);
@@ -1555,47 +1617,47 @@ function coco_processSyncQueue() {
         }
       }
 
-       const qcInvFlag = String(dp.getProperty(APP.INTERNAL.QC_INV_SYNC_FLAG) || '') === '1';
-const shipUaeEgInvFlag = String(dp.getProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG) || '') === '1';
+      const qcInvFlag = String(dp.getProperty(APP.INTERNAL.QC_INV_SYNC_FLAG) || '') === '1';
+      const shipUaeEgInvFlag = String(dp.getProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG) || '') === '1';
 
-// Clear flags early (debounce). If errors happen, we re-set them.
-if (qcInvFlag) dp.deleteProperty(APP.INTERNAL.QC_INV_SYNC_FLAG);
-if (shipUaeEgInvFlag) dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG);
+      // Clear flags early (debounce). If errors happen, we re-set them.
+      if (qcInvFlag) dp.deleteProperty(APP.INTERNAL.QC_INV_SYNC_FLAG);
+      if (shipUaeEgInvFlag) dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG);
 
-if (qcInvFlag) {
-  try {
-    withLock_('QC_INV_SYNC', function () {
-      if (typeof syncQCtoInventory_UAE !== 'function') throw new Error('syncQCtoInventory_UAE is not defined');
-      syncQCtoInventory_UAE();
-    });
-    dp.setProperty(APP.INTERNAL.QC_INV_LAST_RUN, new Date().toISOString());
-    dp.deleteProperty(APP.INTERNAL.QC_INV_LAST_ERROR);
-  } catch (err) {
-    dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); // requeue
-    dp.setProperty(APP.INTERNAL.QC_INV_LAST_ERROR, String(err && err.message ? err.message : err));
-    logError_('coco_processSyncQueue:QC_INV', err);
-  }
-}
+      if (qcInvFlag) {
+        try {
+          withLock_('QC_INV_SYNC', function () {
+            if (typeof syncQCtoInventory_UAE !== 'function') throw new Error('syncQCtoInventory_UAE is not defined');
+            syncQCtoInventory_UAE();
+          });
+          dp.setProperty(APP.INTERNAL.QC_INV_LAST_RUN, new Date().toISOString());
+          dp.deleteProperty(APP.INTERNAL.QC_INV_LAST_ERROR);
+        } catch (err) {
+          dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); // requeue
+          dp.setProperty(APP.INTERNAL.QC_INV_LAST_ERROR, String(err && err.message ? err.message : err));
+          logError_('coco_processSyncQueue:QC_INV', err);
+        }
+      }
 
-if (shipUaeEgInvFlag) {
-  try {
-    withLock_('SHIP_UAE_EG_INV_SYNC', function () {
-      if (typeof syncShipmentsUaeEgToInventory !== 'function') throw new Error('syncShipmentsUaeEgToInventory is not defined');
-      syncShipmentsUaeEgToInventory();
-    });
-    dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_RUN, new Date().toISOString());
-    dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR);
-  } catch (err) {
-    dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1'); // requeue
-    dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR, String(err && err.message ? err.message : err));
-    logError_('coco_processSyncQueue:SHIP_UAE_EG_INV', err);
-  }
-}
+      if (shipUaeEgInvFlag) {
+        try {
+          withLock_('SHIP_UAE_EG_INV_SYNC', function () {
+            if (typeof syncShipmentsUaeEgToInventory !== 'function') throw new Error('syncShipmentsUaeEgToInventory is not defined');
+            syncShipmentsUaeEgToInventory();
+          });
+          dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_RUN, new Date().toISOString());
+          dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR);
+        } catch (err) {
+          dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1'); // requeue
+          dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR, String(err && err.message ? err.message : err));
+          logError_('coco_processSyncQueue:SHIP_UAE_EG_INV', err);
+        }
+      }
 
       // 3) Orders sync (existing behavior)
       stage = 'orders';
       const markOrdersSuccess_ = function () {
-        try { dp.setProperty(APP.INTERNAL.ORDERS_SYNC_LAST_RUN, new Date().toISOString()); } catch (e) {}
+        try { dp.setProperty(APP.INTERNAL.ORDERS_SYNC_LAST_RUN, new Date().toISOString()); } catch (e) { }
       };
 
       if (snapshot.ordersForceAll === '1') {
@@ -1635,7 +1697,7 @@ if (shipUaeEgInvFlag) {
         if (stage === 'orders') dp.setProperty(APP.INTERNAL.ORDERS_SYNC_LAST_ERROR, stack);
         else if (stage === 'qc') dp.setProperty(APP.INTERNAL.QC_GEN_LAST_ERROR, stack);
         else if (stage === 'shipments') dp.setProperty(APP.INTERNAL.SHIP_CN_UAE_LAST_ERROR, stack);
-      } catch (e) {}
+      } catch (e) { }
 
       logError_('coco_processSyncQueue', err, { stage: stage });
       throw err;
@@ -1662,14 +1724,14 @@ function coco_debugOrdersSyncStatus() {
     const dp = PropertiesService.getDocumentProperties();
     const rawQueue = dp.getProperty(APP.INTERNAL.ORDERS_SYNC_QUEUE_KEY) || '[]';
     const forceAll = String(dp.getProperty(APP.INTERNAL.ORDERS_SYNC_ALL_FLAG) || '') === '1';
-    const lastRun  = dp.getProperty(APP.INTERNAL.ORDERS_SYNC_LAST_RUN) || '';
-    const lastErr  = dp.getProperty(APP.INTERNAL.ORDERS_SYNC_LAST_ERROR) || '';
+    const lastRun = dp.getProperty(APP.INTERNAL.ORDERS_SYNC_LAST_RUN) || '';
+    const lastErr = dp.getProperty(APP.INTERNAL.ORDERS_SYNC_LAST_ERROR) || '';
 
     let queueLen = -1;
     try { queueLen = (JSON.parse(rawQueue) || []).length; } catch (e) { queueLen = -1; }
 
     const hasIncremental = (typeof orders_syncFromPurchasesByOrderIds_ === 'function');
-    const hasRebuild     = (typeof rebuildOrdersSummary === 'function');
+    const hasRebuild = (typeof rebuildOrdersSummary === 'function');
 
     const msg = [
       'Orders Sync Status',
