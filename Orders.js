@@ -30,7 +30,7 @@ const ORDER_HEADERS = [
 
 function orders_tryGetUi_() {
   try {
-    return (SpreadsheetApp.getUi ? SpreadsheetApp.getUi() : null);
+    return null; // UI is centralized via safeAlert_/safeConfirm_/safePromptText_ in AppCore
   } catch (e) {
     return null; // Trigger / time-driven context
   }
@@ -60,7 +60,7 @@ function setupOrdersLayout() {
     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
 
     // Normalize headers if any legacy
-    try { normalizeHeaders_(shO, 1); } catch (e) {}
+    try { normalizeHeaders_(shO, 1); } catch (e) { }
 
     // Ensure schema (non-destructive)
     if (typeof ensureSheetSchema_ === 'function') {
@@ -128,7 +128,7 @@ function rebuildOrdersSummary() {
     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
 
     // Normalize Purchases headers (just in case)
-    try { normalizeHeaders_(shP, 1); } catch (e) {}
+    try { normalizeHeaders_(shP, 1); } catch (e) { }
 
     const mapP = getHeaderMap_(shP, 1);
     orders_assertPurchasesHeadersForOrders_(mapP);
@@ -152,22 +152,22 @@ function rebuildOrdersSummary() {
 
     const idx = (h) => (mapP[h] ? (mapP[h] - 1) : -1);
 
-    const iOrderId        = idx(APP.COLS.PURCHASES.ORDER_ID);
-    const iOrderDate      = idx(APP.COLS.PURCHASES.ORDER_DATE);
-    const iPlatform       = idx(APP.COLS.PURCHASES.PLATFORM);
-    const iSellerName     = idx(APP.COLS.PURCHASES.SELLER);
-    const iSku            = idx(APP.COLS.PURCHASES.SKU);
-    const iCurrency       = idx(APP.COLS.PURCHASES.CURRENCY);
-    const iBuyerName      = idx(APP.COLS.PURCHASES.BUYER_NAME);
-    const iQty            = idx(APP.COLS.PURCHASES.QTY);
-    const iNotes          = idx(APP.COLS.PURCHASES.NOTES);
+    const iOrderId = idx(APP.COLS.PURCHASES.ORDER_ID);
+    const iOrderDate = idx(APP.COLS.PURCHASES.ORDER_DATE);
+    const iPlatform = idx(APP.COLS.PURCHASES.PLATFORM);
+    const iSellerName = idx(APP.COLS.PURCHASES.SELLER);
+    const iSku = idx(APP.COLS.PURCHASES.SKU);
+    const iCurrency = idx(APP.COLS.PURCHASES.CURRENCY);
+    const iBuyerName = idx(APP.COLS.PURCHASES.BUYER_NAME);
+    const iQty = idx(APP.COLS.PURCHASES.QTY);
+    const iNotes = idx(APP.COLS.PURCHASES.NOTES);
 
-    const iTotalOrig      = idx(APP.COLS.PURCHASES.TOTAL_ORIG);
-    const iTotalEgp       = idx(APP.COLS.PURCHASES.TOTAL_EGP);
-    const iShipEg         = idx(APP.COLS.PURCHASES.SHIP_EG);
-    const iCustomsEgp     = idx(APP.COLS.PURCHASES.CUSTOMS_EGP);
-    const iLandedEgp      = idx(APP.COLS.PURCHASES.LANDED_COST);
-    const iUnitLandedEgp  = idx(APP.COLS.PURCHASES.UNIT_LANDED);
+    const iTotalOrig = idx(APP.COLS.PURCHASES.TOTAL_ORIG);
+    const iTotalEgp = idx(APP.COLS.PURCHASES.TOTAL_EGP);
+    const iShipEg = idx(APP.COLS.PURCHASES.SHIP_EG);
+    const iCustomsEgp = idx(APP.COLS.PURCHASES.CUSTOMS_EGP);
+    const iLandedEgp = idx(APP.COLS.PURCHASES.LANDED_COST);
+    const iUnitLandedEgp = idx(APP.COLS.PURCHASES.UNIT_LANDED);
 
     /** @type {Object<string, any>} */
     const orders = {};
@@ -234,20 +234,20 @@ function rebuildOrdersSummary() {
       }
 
       o.totalLines += 1;
-      o.totalQty   += qty;
+      o.totalQty += qty;
 
-      setIfBetter_(o, 'orderDate',      (iOrderDate >= 0 ? row[iOrderDate] : ''), 'date');
-      setIfBetter_(o, 'platform',       (iPlatform >= 0 ? row[iPlatform] : ''), 'text');
-      setIfBetter_(o, 'sellerName',     (iSellerName >= 0 ? row[iSellerName] : ''), 'text');
-      setIfBetter_(o, 'currency',       (iCurrency >= 0 ? row[iCurrency] : ''), 'text');
-      setIfBetter_(o, 'buyerName',      (iBuyerName >= 0 ? row[iBuyerName] : ''), 'text');
+      setIfBetter_(o, 'orderDate', (iOrderDate >= 0 ? row[iOrderDate] : ''), 'date');
+      setIfBetter_(o, 'platform', (iPlatform >= 0 ? row[iPlatform] : ''), 'text');
+      setIfBetter_(o, 'sellerName', (iSellerName >= 0 ? row[iSellerName] : ''), 'text');
+      setIfBetter_(o, 'currency', (iCurrency >= 0 ? row[iCurrency] : ''), 'text');
+      setIfBetter_(o, 'buyerName', (iBuyerName >= 0 ? row[iBuyerName] : ''), 'text');
 
       setIfBetter_(o, 'totalOrderOrig', (iTotalOrig >= 0 ? row[iTotalOrig] : 0), 'number');
-      setIfBetter_(o, 'orderTotalEGP',  (iTotalEgp >= 0 ? row[iTotalEgp] : 0), 'number');
-      setIfBetter_(o, 'shipUaeEg',      (iShipEg >= 0 ? row[iShipEg] : 0), 'number');
-      setIfBetter_(o, 'customsEGP',     (iCustomsEgp >= 0 ? row[iCustomsEgp] : 0), 'number');
-      setIfBetter_(o, 'landedCostEGP',  (iLandedEgp >= 0 ? row[iLandedEgp] : 0), 'number');
-      setIfBetter_(o, 'unitLandedEGP',  (iUnitLandedEgp >= 0 ? row[iUnitLandedEgp] : 0), 'number');
+      setIfBetter_(o, 'orderTotalEGP', (iTotalEgp >= 0 ? row[iTotalEgp] : 0), 'number');
+      setIfBetter_(o, 'shipUaeEg', (iShipEg >= 0 ? row[iShipEg] : 0), 'number');
+      setIfBetter_(o, 'customsEGP', (iCustomsEgp >= 0 ? row[iCustomsEgp] : 0), 'number');
+      setIfBetter_(o, 'landedCostEGP', (iLandedEgp >= 0 ? row[iLandedEgp] : 0), 'number');
+      setIfBetter_(o, 'unitLandedEGP', (iUnitLandedEgp >= 0 ? row[iUnitLandedEgp] : 0), 'number');
 
       addNoteUnique_(o, (iNotes >= 0 ? row[iNotes] : ''));
     });
@@ -323,10 +323,10 @@ function orders_syncFromPurchasesByOrderIds_(orderIds) {
     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
 
     // Ensure Orders schema (non-destructive)
-    try { setupOrdersLayout(); } catch (e) {}
+    try { setupOrdersLayout(); } catch (e) { }
 
     // Normalize Purchases headers (just in case)
-    try { normalizeHeaders_(shP, 1); } catch (e) {}
+    try { normalizeHeaders_(shP, 1); } catch (e) { }
 
     const mapP = getHeaderMap_(shP, 1);
     orders_assertPurchasesHeadersForOrders_(mapP);
@@ -339,21 +339,21 @@ function orders_syncFromPurchasesByOrderIds_(orderIds) {
 
     const idx = (h) => (mapP[h] ? (mapP[h] - 1) : -1);
 
-    const iOrderId        = idx(APP.COLS.PURCHASES.ORDER_ID);
-    const iOrderDate      = idx(APP.COLS.PURCHASES.ORDER_DATE);
-    const iPlatform       = idx(APP.COLS.PURCHASES.PLATFORM);
-    const iSellerName     = idx(APP.COLS.PURCHASES.SELLER);
-    const iCurrency       = idx(APP.COLS.PURCHASES.CURRENCY);
-    const iBuyerName      = idx(APP.COLS.PURCHASES.BUYER_NAME);
-    const iQty            = idx(APP.COLS.PURCHASES.QTY);
-    const iNotes          = idx(APP.COLS.PURCHASES.NOTES);
+    const iOrderId = idx(APP.COLS.PURCHASES.ORDER_ID);
+    const iOrderDate = idx(APP.COLS.PURCHASES.ORDER_DATE);
+    const iPlatform = idx(APP.COLS.PURCHASES.PLATFORM);
+    const iSellerName = idx(APP.COLS.PURCHASES.SELLER);
+    const iCurrency = idx(APP.COLS.PURCHASES.CURRENCY);
+    const iBuyerName = idx(APP.COLS.PURCHASES.BUYER_NAME);
+    const iQty = idx(APP.COLS.PURCHASES.QTY);
+    const iNotes = idx(APP.COLS.PURCHASES.NOTES);
 
-    const iTotalOrig      = idx(APP.COLS.PURCHASES.TOTAL_ORIG);
-    const iTotalEgp       = idx(APP.COLS.PURCHASES.TOTAL_EGP);
-    const iShipEg         = idx(APP.COLS.PURCHASES.SHIP_EG);
-    const iCustomsEgp     = idx(APP.COLS.PURCHASES.CUSTOMS_EGP);
-    const iLandedEgp      = idx(APP.COLS.PURCHASES.LANDED_COST);
-    const iUnitLandedEgp  = idx(APP.COLS.PURCHASES.UNIT_LANDED);
+    const iTotalOrig = idx(APP.COLS.PURCHASES.TOTAL_ORIG);
+    const iTotalEgp = idx(APP.COLS.PURCHASES.TOTAL_EGP);
+    const iShipEg = idx(APP.COLS.PURCHASES.SHIP_EG);
+    const iCustomsEgp = idx(APP.COLS.PURCHASES.CUSTOMS_EGP);
+    const iLandedEgp = idx(APP.COLS.PURCHASES.LANDED_COST);
+    const iUnitLandedEgp = idx(APP.COLS.PURCHASES.UNIT_LANDED);
 
     const setIfBetter_ = (obj, key, val, mode) => {
       if (val == null) return;
@@ -418,20 +418,20 @@ function orders_syncFromPurchasesByOrderIds_(orderIds) {
       }
 
       o.totalLines += 1;
-      o.totalQty   += qty;
+      o.totalQty += qty;
 
-      setIfBetter_(o, 'orderDate',      (iOrderDate >= 0 ? row[iOrderDate] : ''), 'date');
-      setIfBetter_(o, 'platform',       (iPlatform >= 0 ? row[iPlatform] : ''), 'text');
-      setIfBetter_(o, 'sellerName',     (iSellerName >= 0 ? row[iSellerName] : ''), 'text');
-      setIfBetter_(o, 'currency',       (iCurrency >= 0 ? row[iCurrency] : ''), 'text');
-      setIfBetter_(o, 'buyerName',      (iBuyerName >= 0 ? row[iBuyerName] : ''), 'text');
+      setIfBetter_(o, 'orderDate', (iOrderDate >= 0 ? row[iOrderDate] : ''), 'date');
+      setIfBetter_(o, 'platform', (iPlatform >= 0 ? row[iPlatform] : ''), 'text');
+      setIfBetter_(o, 'sellerName', (iSellerName >= 0 ? row[iSellerName] : ''), 'text');
+      setIfBetter_(o, 'currency', (iCurrency >= 0 ? row[iCurrency] : ''), 'text');
+      setIfBetter_(o, 'buyerName', (iBuyerName >= 0 ? row[iBuyerName] : ''), 'text');
 
       setIfBetter_(o, 'totalOrderOrig', (iTotalOrig >= 0 ? row[iTotalOrig] : 0), 'number');
-      setIfBetter_(o, 'orderTotalEGP',  (iTotalEgp >= 0 ? row[iTotalEgp] : 0), 'number');
-      setIfBetter_(o, 'shipUaeEg',      (iShipEg >= 0 ? row[iShipEg] : 0), 'number');
-      setIfBetter_(o, 'customsEGP',     (iCustomsEgp >= 0 ? row[iCustomsEgp] : 0), 'number');
-      setIfBetter_(o, 'landedCostEGP',  (iLandedEgp >= 0 ? row[iLandedEgp] : 0), 'number');
-      setIfBetter_(o, 'unitLandedEGP',  (iUnitLandedEgp >= 0 ? row[iUnitLandedEgp] : 0), 'number');
+      setIfBetter_(o, 'orderTotalEGP', (iTotalEgp >= 0 ? row[iTotalEgp] : 0), 'number');
+      setIfBetter_(o, 'shipUaeEg', (iShipEg >= 0 ? row[iShipEg] : 0), 'number');
+      setIfBetter_(o, 'customsEGP', (iCustomsEgp >= 0 ? row[iCustomsEgp] : 0), 'number');
+      setIfBetter_(o, 'landedCostEGP', (iLandedEgp >= 0 ? row[iLandedEgp] : 0), 'number');
+      setIfBetter_(o, 'unitLandedEGP', (iUnitLandedEgp >= 0 ? row[iUnitLandedEgp] : 0), 'number');
 
       addNoteUnique_(o, (iNotes >= 0 ? row[iNotes] : ''));
     });
@@ -520,7 +520,7 @@ function orders_syncFromPurchasesByOrderIds_(orderIds) {
     try {
       const rowsCount = Math.max(0, shO.getLastRow() - 1);
       orders_applyOrdersFormats_(shO, getHeaderMap_(shO, 1), rowsCount);
-    } catch (e) {}
+    } catch (e) { }
 
   } catch (e) {
     logError_('orders_syncFromPurchasesByOrderIds_', e);
@@ -545,7 +545,7 @@ function orders_removeFilterIfAny_(sh) {
   try {
     const f = sh.getFilter();
     if (f) f.remove();
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function orders_applyHeaderStyle_(sh, headers) {
@@ -568,7 +568,7 @@ function orders_applyHeaderStyle_(sh, headers) {
     try {
       orders_removeFilterIfAny_(sh);
       sh.getRange(1, 1, 1, headers.length).createFilter();
-    } catch (e2) {}
+    } catch (e2) { }
   }
 }
 

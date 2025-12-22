@@ -9,25 +9,25 @@
 
 // Purchases sheet header (canonical)
 const PURCHASE_HEADERS = [
-  'Order ID','Order Date','Platform','Seller Name','SKU','Batch Code',
-  'Product Name','Variant / Color','Qty',
+  'Order ID', 'Order Date', 'Platform', 'Seller Name', 'SKU', 'Batch Code',
+  'Product Name', 'Variant / Color', 'Qty',
 
-  'Unit Price (Orig)','Currency',
-  'Subtotal (Orig)','Discount (Order)','Shipping Fee (Order)','Total Order (Orig)',
+  'Unit Price (Orig)', 'Currency',
+  'Subtotal (Orig)', 'Discount (Order)', 'Shipping Fee (Order)', 'Total Order (Orig)',
   'Final Unit Price',
 
-  'Buyer Name','Buyer Phone','Buyer Address',
+  'Buyer Name', 'Buyer Phone', 'Buyer Address',
 
-  'Payment Method','Payment Card Last4',
-  'Invoice File ID','Invoice Link','Invoice Preview',
+  'Payment Method', 'Payment Card Last4',
+  'Invoice File ID', 'Invoice Link', 'Invoice Preview',
 
-  'FX Rate → EGP','Order Total (EGP)','Ship UAE→EG (EGP)',
-  'Customs/Fees %','Customs/Fees (EGP)',
-  'Landed Cost (EGP)','Unit Landed Cost (EGP)','Notes',
+  'FX Rate → EGP', 'Order Total (EGP)', 'Ship UAE→EG (EGP)',
+  'Customs/Fees %', 'Customs/Fees (EGP)',
+  'Landed Cost (EGP)', 'Unit Landed Cost (EGP)', 'Notes',
 
-  'Line Gross (Orig)','Discount Alloc (Orig)','Shipping Alloc (Orig)',
-  'Line Net (Orig)','Net Unit Price (Orig)','Net Unit Price (EGP)',
-'Line ID'
+  'Line Gross (Orig)', 'Discount Alloc (Orig)', 'Shipping Alloc (Orig)',
+  'Line Net (Orig)', 'Net Unit Price (Orig)', 'Net Unit Price (EGP)',
+  'Line ID'
 ];
 
 
@@ -85,7 +85,7 @@ function purchases_maybeAutoRepairFormulas_(sh, map) {
     });
 
   } catch (err) {
-    try { logError_('purchases_maybeAutoRepairFormulas_', err); } catch (e) {}
+    try { logError_('purchases_maybeAutoRepairFormulas_', err); } catch (e) { }
   }
 }
 
@@ -95,15 +95,15 @@ function purchases_ensureLineIds_(sh, map, startRow, n) {
 
     const H = (APP && APP.COLS && APP.COLS.PURCHASES) ? APP.COLS.PURCHASES : {};
     const cLineId = map[H.LINE_ID] || map['Line ID'];
-    const cOrder  = map[H.ORDER_ID] || map['Order ID'];
-    const cSku    = map[H.SKU] || map['SKU'];
+    const cOrder = map[H.ORDER_ID] || map['Order ID'];
+    const cSku = map[H.SKU] || map['SKU'];
 
     if (!cLineId || !cOrder || !cSku) return 0;
     if (n <= 0) return 0;
 
-    const orderIds = sh.getRange(startRow, cOrder,  n, 1).getValues();
-    const skus     = sh.getRange(startRow, cSku,    n, 1).getValues();
-    const lineIds  = sh.getRange(startRow, cLineId, n, 1).getValues();
+    const orderIds = sh.getRange(startRow, cOrder, n, 1).getValues();
+    const skus = sh.getRange(startRow, cSku, n, 1).getValues();
+    const lineIds = sh.getRange(startRow, cLineId, n, 1).getValues();
 
     let changed = false;
     let count = 0;
@@ -127,7 +127,7 @@ function purchases_ensureLineIds_(sh, map, startRow, n) {
     }
     return count;
   } catch (err) {
-    try { logError_('purchases_ensureLineIds_', err); } catch (e) {}
+    try { logError_('purchases_ensureLineIds_', err); } catch (e) { }
     return 0;
   }
 }
@@ -149,39 +149,39 @@ function purchasesOnEditDefaults_(e) {
     if (nr > 300 || nc > 25) return;
 
     const map = getHeaderMap_(sh, 1);
-    try { purchases_maybeAutoRepairFormulas_(sh, map); } catch (e) {}
+    try { purchases_maybeAutoRepairFormulas_(sh, map); } catch (e) { }
 
     const H = (APP && APP.COLS && APP.COLS.PURCHASES) ? APP.COLS.PURCHASES : {};
-    const cOrder   = map[H.ORDER_ID]    || map['Order ID'];
-    const cCurr    = map[H.CURRENCY]    || map['Currency'];
-    const cFx      = map[H.FX_RATE]     || map['FX Rate → EGP'];
-    const cShipEg  = map[H.SHIP_EG]     || map['Ship UAE→EG (EGP)'];
+    const cOrder = map[H.ORDER_ID] || map['Order ID'];
+    const cCurr = map[H.CURRENCY] || map['Currency'];
+    const cFx = map[H.FX_RATE] || map['FX Rate → EGP'];
+    const cShipEg = map[H.SHIP_EG] || map['Ship UAE→EG (EGP)'];
     const cCustoms = map[H.CUSTOMS_PCT] || map['Customs/Fees %'];
 
     if (!cOrder) return;
 
     const startRow = Math.max(2, row0);
-    const endRow   = Math.min(sh.getLastRow(), row0 + nr - 1);
+    const endRow = Math.min(sh.getLastRow(), row0 + nr - 1);
     const n = endRow - startRow + 1;
     if (n <= 0) return;
-    try { purchases_ensureLineIds_(sh, map, startRow, n); } catch (e) {}
+    try { purchases_ensureLineIds_(sh, map, startRow, n); } catch (e) { }
 
     const orderIds = sh.getRange(startRow, cOrder, n, 1).getValues();
 
-    const currVals    = cCurr    ? sh.getRange(startRow, cCurr, n, 1).getValues() : null;
-    const fxVals      = cFx      ? sh.getRange(startRow, cFx, n, 1).getValues() : null;
-    const shipVals    = cShipEg  ? sh.getRange(startRow, cShipEg, n, 1).getValues() : null;
+    const currVals = cCurr ? sh.getRange(startRow, cCurr, n, 1).getValues() : null;
+    const fxVals = cFx ? sh.getRange(startRow, cFx, n, 1).getValues() : null;
+    const shipVals = cShipEg ? sh.getRange(startRow, cShipEg, n, 1).getValues() : null;
     const customsVals = cCustoms ? sh.getRange(startRow, cCustoms, n, 1).getValues() : null;
 
     const defCurrency = (typeof getDefaultCurrency_ === 'function') ? String(getDefaultCurrency_() || '').trim().toUpperCase() : '';
-    const defFxAed    = (typeof getDefaultFxAedEgp_ === 'function') ? Number(getDefaultFxAedEgp_()) : 0;
-    const defFxCny    = (typeof getDefaultFxRate_ === 'function') ? Number(getDefaultFxRate_()) : 0; // CNY→EGP
-    const defShip     = (typeof getDefaultShipUaeEgPerOrder_ === 'function') ? Number(getDefaultShipUaeEgPerOrder_()) : 0;
-    const defCustoms  = (typeof getDefaultCustomsPct_ === 'function') ? Number(getDefaultCustomsPct_()) : 0;
+    const defFxAed = (typeof getDefaultFxAedEgp_ === 'function') ? Number(getDefaultFxAedEgp_()) : 0;
+    const defFxCny = (typeof getDefaultFxRate_ === 'function') ? Number(getDefaultFxRate_()) : 0; // CNY→EGP
+    const defShip = (typeof getDefaultShipUaeEgPerOrder_ === 'function') ? Number(getDefaultShipUaeEgPerOrder_()) : 0;
+    const defCustoms = (typeof getDefaultCustomsPct_ === 'function') ? Number(getDefaultCustomsPct_()) : 0;
 
     const isBlank = (v) => v === '' || v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
 
-    let currChanged=false, fxChanged=false, shipChanged=false, customsChanged=false;
+    let currChanged = false, fxChanged = false, shipChanged = false, customsChanged = false;
 
     for (let i = 0; i < n; i++) {
       const oid = String(orderIds[i][0] || '').trim();
@@ -226,10 +226,10 @@ function purchasesOnEditDefaults_(e) {
       }
     }
 
-    if (currChanged && cCurr)        sh.getRange(startRow, cCurr, n, 1).setValues(currVals);
-    if (fxChanged && cFx)            sh.getRange(startRow, cFx, n, 1).setValues(fxVals);
-    if (shipChanged && cShipEg)      sh.getRange(startRow, cShipEg, n, 1).setValues(shipVals);
-    if (customsChanged && cCustoms)  sh.getRange(startRow, cCustoms, n, 1).setValues(customsVals);
+    if (currChanged && cCurr) sh.getRange(startRow, cCurr, n, 1).setValues(currVals);
+    if (fxChanged && cFx) sh.getRange(startRow, cFx, n, 1).setValues(fxVals);
+    if (shipChanged && cShipEg) sh.getRange(startRow, cShipEg, n, 1).setValues(shipVals);
+    if (customsChanged && cCustoms) sh.getRange(startRow, cCustoms, n, 1).setValues(customsVals);
 
   } catch (err) {
     logError_('purchasesOnEditDefaults_', err, {
@@ -249,7 +249,7 @@ function setupPurchasesLayout() {
     const sh = ensureSheet_(APP.SHEETS.PURCHASES);
 
     // Normalize headers (aliases like "Product" -> "Product Name")
-    try { normalizeHeaders_(sh, 1); } catch (e) {}
+    try { normalizeHeaders_(sh, 1); } catch (e) { }
 
     // Ensure Settings structure (non-destructive)
     if (typeof ensureSettingsSheet_ === 'function') {
@@ -257,8 +257,8 @@ function setupPurchasesLayout() {
     } else {
       const setSh = ensureSheet_(APP.SHEETS.SETTINGS);
       if (setSh.getLastRow() === 0) {
-        setSh.getRange('A1:B1').setValues([['Setting','Value']]);
-        setSh.getRange('D1:G1').setValues([['Platforms','Payment Methods','Currencies','Stores (optional)']]);
+        setSh.getRange('A1:B1').setValues([['Setting', 'Value']]);
+        setSh.getRange('D1:G1').setValues([['Platforms', 'Payment Methods', 'Currencies', 'Stores (optional)']]);
       }
     }
 
@@ -282,13 +282,13 @@ function setupPurchasesLayout() {
       const lastCol = sh.getLastColumn();
       const r = sh.getRange(1, 1, 1, lastCol);
       if (!sh.getFilter()) r.createFilter();
-    } catch (e) {}
+    } catch (e) { }
 
     const map = getHeaderMap_(sh, 1);
     try {
       const n = Math.max(0, sh.getLastRow() - 1);
       if (n > 0) purchases_ensureLineIds_(sh, map, 2, n);
-    } catch (e) {}
+    } catch (e) { }
 
     applyPurchasesFormats_(sh, map);
     applyPurchasesValidations_(sh, map);
@@ -300,9 +300,9 @@ function setupPurchasesLayout() {
     installPurchasesFormulas();
 
     // Enqueue Orders sync (if queue is enabled)
-    try { if (typeof coco_enqueueOrdersSync_ === 'function') coco_enqueueOrdersSync_(null, { forceAll: true }); } catch (e) {}
+    try { if (typeof coco_enqueueOrdersSync_ === 'function') coco_enqueueOrdersSync_(null, { forceAll: true }); } catch (e) { }
 
-    SpreadsheetApp.getUi().alert('✅ Purchases layout ensured (بدون مسح بيانات).');
+    safeAlert_('✅ Purchases layout ensured (بدون مسح بيانات).');
   } catch (e) {
     logError_('setupPurchasesLayout', e);
     throw e;
@@ -334,7 +334,7 @@ function purchasesOnEdit_(e) {
   } catch (err) {
     logError_('purchasesOnEdit_', err, {
       sheet: e && e.range && e.range.getSheet().getName(),
-      a1:    e && e.range && e.range.getA1Notation()
+      a1: e && e.range && e.range.getA1Notation()
     });
   }
 }
@@ -352,11 +352,11 @@ function setupPurchasesLayoutHardReset() {
   try {
     ensureErrorLog_();
 
-    const sh    = ensureSheet_(APP.SHEETS.PURCHASES);
+    const sh = ensureSheet_(APP.SHEETS.PURCHASES);
     const setSh = ensureSheet_(APP.SHEETS.SETTINGS);
 
-    const ui = SpreadsheetApp.getUi();
-    const res = ui.alert(
+    const ui = null; // UI is centralized via safe* helpers in AppCore
+    const res = safeAlert_(
       'تحذير',
       'ده هيمسح Purchases و Settings بالكامل. متأكد؟',
       ui.ButtonSet.YES_NO
@@ -365,25 +365,25 @@ function setupPurchasesLayoutHardReset() {
 
     // Reset Settings
     setSh.clear();
-    setSh.getRange('A1:B1').setValues([['Setting','Value']]);
+    setSh.getRange('A1:B1').setValues([['Setting', 'Value']]);
     setSh.getRange('A2:B6').setValues([
       ['Default FX AED→EGP', 0],
       ['Default Ship UAE→EG (EGP) / order', 0],
       ['Default Customs % (e.g. 0.20 = 20%)', 0],
-      ['—','—'],
-      ['ملاحظات','يمكنك تعديل القوائم يمين الصفحة']
+      ['—', '—'],
+      ['ملاحظات', 'يمكنك تعديل القوائم يمين الصفحة']
     ]);
 
     // IMPORTANT: Match kernel naming (and we support legacy too)
-    setSh.getRange('D1:G1').setValues([['Platforms','Payment Methods','Currencies','Stores (optional)']]);
-    setSh.getRange('D2:D6').setValues([['AliExpress'],['Alibaba'],['Shein'],['Amazon'],['Noon']]);
-    setSh.getRange('E2:E7').setValues([['VISA'],['MASTERCARD'],['AMEX'],['Apple Pay'],['Google Pay'],['Cash on Delivery']]);
-    setSh.getRange('F2:F6').setValues([['AED'],['USD'],['EGP'],['SAR'],['EUR']]);
+    setSh.getRange('D1:G1').setValues([['Platforms', 'Payment Methods', 'Currencies', 'Stores (optional)']]);
+    setSh.getRange('D2:D6').setValues([['AliExpress'], ['Alibaba'], ['Shein'], ['Amazon'], ['Noon']]);
+    setSh.getRange('E2:E7').setValues([['VISA'], ['MASTERCARD'], ['AMEX'], ['Apple Pay'], ['Google Pay'], ['Cash on Delivery']]);
+    setSh.getRange('F2:F6').setValues([['AED'], ['USD'], ['EGP'], ['SAR'], ['EUR']]);
 
     // Clear settings cache if AppCore implements it
     try {
       if (typeof clearSettingsCache_ === 'function') clearSettingsCache_();
-    } catch (e) {}
+    } catch (e) { }
 
     // Reset Purchases (remove filter safely BEFORE/AFTER clear)
     purchases_removeFilterIfAny_(sh);
@@ -400,7 +400,7 @@ function setupPurchasesLayoutHardReset() {
       .setBackground('#f1f3f4');
 
     // Create filter safely
-    try { sh.getRange(1, 1, 1, PURCHASE_HEADERS.length).createFilter(); } catch (e) {}
+    try { sh.getRange(1, 1, 1, PURCHASE_HEADERS.length).createFilter(); } catch (e) { }
 
     const map = getHeaderMap_(sh, 1);
     applyPurchasesFormats_(sh, map);
@@ -411,7 +411,7 @@ function setupPurchasesLayoutHardReset() {
     purchases_backfillDefaults_();
     installPurchasesFormulas();
 
-    SpreadsheetApp.getUi().alert('✅ HARD RESET done.');
+    safeAlert_('✅ HARD RESET done.');
   } catch (e) {
     logError_('setupPurchasesLayoutHardReset', e);
     throw e;
@@ -422,7 +422,7 @@ function purchases_removeFilterIfAny_(sh) {
   try {
     const f = sh.getFilter();
     if (f) f.remove();
-  } catch (e) {}
+  } catch (e) { }
 }
 
 /** =============================================================
@@ -459,21 +459,21 @@ function purchases_backfillOrderDefaults_() {
   const cOrder = map['Order ID'];
   if (!cOrder) return;
 
-  const cCurr    = map['Currency'];
-  const cFx      = map['FX Rate → EGP'];
-  const cShipEg  = map['Ship UAE→EG (EGP)'];
+  const cCurr = map['Currency'];
+  const cFx = map['FX Rate → EGP'];
+  const cShipEg = map['Ship UAE→EG (EGP)'];
   const cCustoms = map['Customs/Fees %'];
 
   const orderIds = sh.getRange(2, cOrder, n, 1).getValues();
-  const curr     = cCurr ? sh.getRange(2, cCurr, n, 1).getValues() : Array.from({ length: n }, () => ['']);
+  const curr = cCurr ? sh.getRange(2, cCurr, n, 1).getValues() : Array.from({ length: n }, () => ['']);
 
-  const fxVals      = cFx      ? sh.getRange(2, cFx, n, 1).getValues() : null;
-  const shipVals    = cShipEg  ? sh.getRange(2, cShipEg, n, 1).getValues() : null;
+  const fxVals = cFx ? sh.getRange(2, cFx, n, 1).getValues() : null;
+  const shipVals = cShipEg ? sh.getRange(2, cShipEg, n, 1).getValues() : null;
   const customsVals = cCustoms ? sh.getRange(2, cCustoms, n, 1).getValues() : null;
 
-  const defFxAed   = (typeof getDefaultFxAedEgp_ === 'function') ? Number(getDefaultFxAedEgp_()) : 0;
-  const defFxCny   = (typeof getDefaultFxRate_ === 'function') ? Number(getDefaultFxRate_()) : 0; // CNY→EGP
-  const defShip    = (typeof getDefaultShipUaeEgPerOrder_ === 'function') ? Number(getDefaultShipUaeEgPerOrder_()) : 0;
+  const defFxAed = (typeof getDefaultFxAedEgp_ === 'function') ? Number(getDefaultFxAedEgp_()) : 0;
+  const defFxCny = (typeof getDefaultFxRate_ === 'function') ? Number(getDefaultFxRate_()) : 0; // CNY→EGP
+  const defShip = (typeof getDefaultShipUaeEgPerOrder_ === 'function') ? Number(getDefaultShipUaeEgPerOrder_()) : 0;
   const defCustoms = (typeof getDefaultCustomsPct_ === 'function') ? Number(getDefaultCustomsPct_()) : 0;
 
   const isBlank = (v) => v === '' || v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
@@ -509,9 +509,9 @@ function purchases_backfillOrderDefaults_() {
     }
   }
 
-  if (fxChanged && cFx)            sh.getRange(2, cFx, n, 1).setValues(fxVals);
-  if (shipChanged && cShipEg)      sh.getRange(2, cShipEg, n, 1).setValues(shipVals);
-  if (customsChanged && cCustoms)  sh.getRange(2, cCustoms, n, 1).setValues(customsVals);
+  if (fxChanged && cFx) sh.getRange(2, cFx, n, 1).setValues(fxVals);
+  if (shipChanged && cShipEg) sh.getRange(2, cShipEg, n, 1).setValues(shipVals);
+  if (customsChanged && cCustoms) sh.getRange(2, cCustoms, n, 1).setValues(customsVals);
 }
 
 // Backward-compatible alias
@@ -527,15 +527,15 @@ function applyPurchasesFormats_(sh, map) {
   if (maxRows <= 1) return;
 
   if (map['Order Date']) sh.getRange(2, map['Order Date'], maxRows - 1, 1).setNumberFormat('yyyy-mm-dd');
-  if (map['Qty'])       sh.getRange(2, map['Qty'],       maxRows - 1, 1).setNumberFormat('0');
+  if (map['Qty']) sh.getRange(2, map['Qty'], maxRows - 1, 1).setNumberFormat('0');
 
   const moneyFields = [
-    'Unit Price (Orig)','Subtotal (Orig)','Discount (Order)','Shipping Fee (Order)',
-    'Total Order (Orig)','Final Unit Price',
-    'Order Total (EGP)','Customs/Fees (EGP)',
-    'Landed Cost (EGP)','Unit Landed Cost (EGP)',
-    'Line Gross (Orig)','Discount Alloc (Orig)','Shipping Alloc (Orig)',
-    'Line Net (Orig)','Net Unit Price (Orig)','Net Unit Price (EGP)',
+    'Unit Price (Orig)', 'Subtotal (Orig)', 'Discount (Order)', 'Shipping Fee (Order)',
+    'Total Order (Orig)', 'Final Unit Price',
+    'Order Total (EGP)', 'Customs/Fees (EGP)',
+    'Landed Cost (EGP)', 'Unit Landed Cost (EGP)',
+    'Line Gross (Orig)', 'Discount Alloc (Orig)', 'Shipping Alloc (Orig)',
+    'Line Net (Orig)', 'Net Unit Price (Orig)', 'Net Unit Price (EGP)',
     'Ship UAE→EG (EGP)'
   ];
 
@@ -543,7 +543,7 @@ function applyPurchasesFormats_(sh, map) {
     if (map[h]) sh.getRange(2, map[h], maxRows - 1, 1).setNumberFormat('0.00');
   });
 
-  if (map['FX Rate → EGP'])  sh.getRange(2, map['FX Rate → EGP'],  maxRows - 1, 1).setNumberFormat('0.0000');
+  if (map['FX Rate → EGP']) sh.getRange(2, map['FX Rate → EGP'], maxRows - 1, 1).setNumberFormat('0.0000');
   if (map['Customs/Fees %']) sh.getRange(2, map['Customs/Fees %'], maxRows - 1, 1).setNumberFormat('0.00%');
 }
 
@@ -558,11 +558,11 @@ function applyPurchasesValidations_(sh, map) {
 
   let platforms = [], payMethods = [], currencies = [];
   try {
-    platforms  = getSettingsListByHeader_('Platforms') || [];
+    platforms = getSettingsListByHeader_('Platforms') || [];
     payMethods = getSettingsListByHeader_('Payment Methods') || [];
     if (!payMethods.length) payMethods = getSettingsListByHeader_('Payment Method') || [];
     currencies = getSettingsListByHeader_('Currencies') || [];
-  } catch (e) {}
+  } catch (e) { }
 
   const dvList_ = function (arr, rangeA1) {
     if (arr && arr.length) {
@@ -571,13 +571,13 @@ function applyPurchasesValidations_(sh, map) {
     return SpreadsheetApp.newDataValidation().requireValueInRange(setSh.getRange(rangeA1), true).build();
   };
 
-  const dvPlatform = dvList_(platforms,  'D2:D');
-  const dvPay      = dvList_(payMethods, 'E2:E');
-  const dvCurr     = dvList_(currencies, 'F2:F');
+  const dvPlatform = dvList_(platforms, 'D2:D');
+  const dvPay = dvList_(payMethods, 'E2:E');
+  const dvCurr = dvList_(currencies, 'F2:F');
 
-  if (map['Platform'])       sh.getRange(2, map['Platform'],       maxRows - 1, 1).setDataValidation(dvPlatform);
+  if (map['Platform']) sh.getRange(2, map['Platform'], maxRows - 1, 1).setDataValidation(dvPlatform);
   if (map['Payment Method']) sh.getRange(2, map['Payment Method'], maxRows - 1, 1).setDataValidation(dvPay);
-  if (map['Currency'])       sh.getRange(2, map['Currency'],       maxRows - 1, 1).setDataValidation(dvCurr);
+  if (map['Currency']) sh.getRange(2, map['Currency'], maxRows - 1, 1).setDataValidation(dvCurr);
 }
 
 /** =============================================================
@@ -648,7 +648,7 @@ function purchases_installFormulasCore_() {
   try {
     const sh = getSheet_(APP.SHEETS.PURCHASES);
 
-    try { normalizeHeaders_(sh, 1); } catch (e) {}
+    try { normalizeHeaders_(sh, 1); } catch (e) { }
     ensureSheetSchema_(APP.SHEETS.PURCHASES, PURCHASE_HEADERS, { addMissing: true, headerRow: 1 });
 
     // ✅ SKU backfill قبل ما نعمل Batch Code (سلسلة النظام بتتبني عليه)
@@ -661,7 +661,7 @@ function purchases_installFormulasCore_() {
     const R = (name) => `${L(name)}2:${L(name)}`;
 
     // Backfill defaults (first line per order) - does not override manual edits
-    try { purchases_backfillOrderDefaults_(); } catch (e) {}
+    try { purchases_backfillOrderDefaults_(); } catch (e) { }
 
     // Helper: order-level scalar per row (first nonblank value in that column for the order)
     const ORDER_SCALAR = (valueHeader) =>
@@ -671,13 +671,13 @@ function purchases_installFormulasCore_() {
       ), 0)`;
 
     const ORDER_DISCOUNT = ORDER_SCALAR('Discount (Order)');
-    const ORDER_SHIPFEE  = ORDER_SCALAR('Shipping Fee (Order)');
-    const ORDER_FX       = ORDER_SCALAR('FX Rate → EGP');
-    const ORDER_SHIP_EG  = ORDER_SCALAR('Ship UAE→EG (EGP)');
-    const ORDER_CUSTOMS  = ORDER_SCALAR('Customs/Fees %');
+    const ORDER_SHIPFEE = ORDER_SCALAR('Shipping Fee (Order)');
+    const ORDER_FX = ORDER_SCALAR('FX Rate → EGP');
+    const ORDER_SHIP_EG = ORDER_SCALAR('Ship UAE→EG (EGP)');
+    const ORDER_CUSTOMS = ORDER_SCALAR('Customs/Fees %');
 
     const ORDER_GROSSSUM = `SUMIF(${R('Order ID')},${R('Order ID')},${R('Line Gross (Orig)')})`;
-    const ORDER_QTYSUM   = `SUMIF(${R('Order ID')},${R('Order ID')},${R('Qty')})`;
+    const ORDER_QTYSUM = `SUMIF(${R('Order ID')},${R('Order ID')},${R('Qty')})`;
 
     // 1) Invoice Preview
     sh.getRange(2, map['Invoice Preview']).setFormula(
@@ -802,10 +802,10 @@ function purchases_installFormulasCore_() {
     );
 
     // Backfill order-level defaults AFTER formulas (non-destructive, fills blanks only)
-    try { purchases_backfillDefaults_(); } catch (e) {}
+    try { purchases_backfillDefaults_(); } catch (e) { }
 
     // Optional: enqueue Orders rebuild (if queue system exists)
-    try { if (typeof coco_enqueueOrdersSync_ === 'function') coco_enqueueOrdersSync_(null, { forceAll: true }); } catch (e) {}
+    try { if (typeof coco_enqueueOrdersSync_ === 'function') coco_enqueueOrdersSync_(null, { forceAll: true }); } catch (e) { }
 
     SpreadsheetApp.flush();
 
@@ -827,9 +827,9 @@ function testPurchasesModule_() {
     purchases_backfillDefaults_();
     installPurchasesFormulas();
 
-    SpreadsheetApp.getUi().alert('✅ Purchases module basic test passed.');
+    safeAlert_('✅ Purchases module basic test passed.');
   } catch (e) {
     logError_('testPurchasesModule_', e);
-    SpreadsheetApp.getUi().alert('❌ Purchases module test failed: ' + e.message);
+    safeAlert_('❌ Purchases module test failed: ' + e.message);
   }
 }

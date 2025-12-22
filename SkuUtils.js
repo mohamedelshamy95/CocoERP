@@ -14,15 +14,15 @@ function sku_headers_() {
 
   return {
     // Purchases
-    P_ORDER: P.ORDER_ID     || 'Order ID',
-    P_SKU:   P.SKU          || 'SKU',
-    P_PROD:  P.PRODUCT_NAME || 'Product Name',
-    P_VAR:   P.VARIANT      || 'Variant / Color',
+    P_ORDER: P.ORDER_ID || 'Order ID',
+    P_SKU: P.SKU || 'SKU',
+    P_PROD: P.PRODUCT_NAME || 'Product Name',
+    P_VAR: P.VARIANT || 'Variant / Color',
 
     // Catalog
-    C_SKU:   C.SKU          || 'SKU',
-    C_PROD:  C.PRODUCT_NAME || 'Product Name',
-    C_VAR:   C.VARIANT      || 'Variant / Color'
+    C_SKU: C.SKU || 'SKU',
+    C_PROD: C.PRODUCT_NAME || 'Product Name',
+    C_VAR: C.VARIANT || 'Variant / Color'
   };
 }
 
@@ -30,8 +30,8 @@ function sku_headers_() {
 function sku_normalizeDigits_(s) {
   const str = String(s || '');
   const map = {
-    '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9',
-    '۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+    '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9'
   };
   return str.replace(/[٠-٩۰-۹]/g, function (d) { return map[d] || d; });
 }
@@ -88,7 +88,7 @@ function sku_tokenize_(s) {
 /** ---------- SKU generation (stable heuristic) ---------- */
 function sku_generateFromText_(productName, variant) {
   const nameTokens = sku_tokenize_(productName);
-  const varTokens  = sku_tokenize_(variant);
+  const varTokens = sku_tokenize_(variant);
 
   if (!nameTokens.length && !varTokens.length) return '';
 
@@ -134,7 +134,7 @@ function sku_clearCatalogIndexCache_() {
   try {
     const cache = CacheService.getDocumentCache();
     cache.remove('CocoERP_CatalogSkuIndex_v1');
-  } catch (e) {}
+  } catch (e) { }
 }
 
 /**
@@ -149,7 +149,7 @@ function sku_getCatalogIndex_(forceRebuild) {
   if (!forceRebuild) {
     const cached = cache.get(cacheKey);
     if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
+      try { return JSON.parse(cached); } catch (e) { }
     }
   }
 
@@ -157,13 +157,13 @@ function sku_getCatalogIndex_(forceRebuild) {
 
   // Ensure Catalog exists + schema (non-destructive)
   const sh = ensureSheet_(APP.SHEETS.CATALOG_EG);
-  try { normalizeHeaders_(sh, 1); } catch (e) {}
-  try { ensureSheetSchema_(APP.SHEETS.CATALOG_EG, Object.values(APP.COLS.CATALOG_EG), { addMissing: true, headerRow: 1 }); } catch (e) {}
+  try { normalizeHeaders_(sh, 1); } catch (e) { }
+  try { ensureSheetSchema_(APP.SHEETS.CATALOG_EG, Object.values(APP.COLS.CATALOG_EG), { addMissing: true, headerRow: 1 }); } catch (e) { }
 
   const map = getHeaderMap_(sh, 1);
-  const cSku  = map[H.C_SKU];
+  const cSku = map[H.C_SKU];
   const cProd = map[H.C_PROD];
-  const cVar  = map[H.C_VAR];
+  const cVar = map[H.C_VAR];
 
   const idx = {};
   const lastRow = sh.getLastRow();
@@ -210,13 +210,13 @@ function sku_registerDraftToCatalog_(sku, productName, variant, source) {
   const H = sku_headers_();
   const sh = ensureSheet_(APP.SHEETS.CATALOG_EG);
 
-  try { normalizeHeaders_(sh, 1); } catch (e) {}
-  try { ensureSheetSchema_(APP.SHEETS.CATALOG_EG, Object.values(APP.COLS.CATALOG_EG), { addMissing: true, headerRow: 1 }); } catch (e) {}
+  try { normalizeHeaders_(sh, 1); } catch (e) { }
+  try { ensureSheetSchema_(APP.SHEETS.CATALOG_EG, Object.values(APP.COLS.CATALOG_EG), { addMissing: true, headerRow: 1 }); } catch (e) { }
 
   const map = getHeaderMap_(sh, 1);
-  const cSku  = map[H.C_SKU];
+  const cSku = map[H.C_SKU];
   const cProd = map[H.C_PROD];
-  const cVar  = map[H.C_VAR];
+  const cVar = map[H.C_VAR];
 
   if (!cSku || !cProd || !cVar) return;
 
@@ -234,13 +234,13 @@ function sku_registerDraftToCatalog_(sku, productName, variant, source) {
   const lastCol = sh.getLastColumn();
   for (let i = 0; i < lastCol; i++) row.push('');
 
-  row[cSku - 1]  = normalized;
+  row[cSku - 1] = normalized;
   row[cProd - 1] = productName || '';
-  row[cVar - 1]  = variant || '';
+  row[cVar - 1] = variant || '';
 
   // Optional: if columns exist in your Catalog schema, fill them when present
   if (map['Status']) row[map['Status'] - 1] = 'Draft';
-  if (map['Notes'])  row[map['Notes'] - 1]  = (source ? ('Auto-registered from ' + source) : 'Auto-registered');
+  if (map['Notes']) row[map['Notes'] - 1] = (source ? ('Auto-registered from ' + source) : 'Auto-registered');
 
   sh.appendRow(row);
 
@@ -268,9 +268,9 @@ function sku_backfillPurchasesSku_(opts) {
   const map = getHeaderMap_(sh, 1);
 
   const cOrder = map[H.P_ORDER];
-  const cSku   = map[H.P_SKU]   || map['SKU'];
-  const cProd  = map[H.P_PROD];
-  const cVar   = map[H.P_VAR];
+  const cSku = map[H.P_SKU] || map['SKU'];
+  const cProd = map[H.P_PROD];
+  const cVar = map[H.P_VAR];
 
   if (!cSku || !cProd || !cVar) {
     throw new Error('Purchases missing required columns for SKU backfill (SKU / Product Name / Variant / Color).');
@@ -292,8 +292,8 @@ function sku_backfillPurchasesSku_(opts) {
     const row = data[i];
 
     const orderId = cOrder ? String(row[cOrder - 1] || '').trim() : '';
-    const prod    = row[cProd - 1];
-    const vari    = row[cVar  - 1];
+    const prod = row[cProd - 1];
+    const vari = row[cVar - 1];
 
     let sku = row[cSku - 1];
 
@@ -329,7 +329,7 @@ function sku_backfillPurchasesSku_(opts) {
     if (generated) {
       changed++;
       if (registerDraft) {
-        try { sku_registerDraftToCatalog_(generated, prod, vari, 'Purchases'); } catch (e) {}
+        try { sku_registerDraftToCatalog_(generated, prod, vari, 'Purchases'); } catch (e) { }
       }
     }
   }
@@ -346,10 +346,10 @@ function sku_backfillPurchasesSku() {
   try {
     ensureErrorLog_();
     const res = sku_backfillPurchasesSku_({ onlyIfOrderId: true, registerDraftToCatalog: false });
-    SpreadsheetApp.getUi().alert('✅ SKU Backfill done. Changed: ' + res.changed + ' / Scanned: ' + res.scanned);
+    safeAlert_('✅ SKU Backfill done. Changed: ' + res.changed + ' / Scanned: ' + res.scanned);
   } catch (e) {
     logError_('sku_backfillPurchasesSku', e);
-    SpreadsheetApp.getUi().alert('❌ SKU Backfill failed: ' + e.message);
+    safeAlert_('❌ SKU Backfill failed: ' + e.message);
     throw e;
   }
 }
@@ -372,9 +372,9 @@ function purchasesOnEditSku_(e) {
 
     const H = sku_headers_();
     const cOrder = map[H.P_ORDER];
-    const cSku   = map[H.P_SKU]   || map['SKU'];
-    const cProd  = map[H.P_PROD];
-    const cVar   = map[H.P_VAR];
+    const cSku = map[H.P_SKU] || map['SKU'];
+    const cProd = map[H.P_PROD];
+    const cVar = map[H.P_VAR];
 
     if (!cSku || !cProd || !cVar) return;
 
@@ -398,15 +398,15 @@ function purchasesOnEditSku_(e) {
     }
 
     const startRow = row0;
-    const endRow   = Math.min(sh.getLastRow(), row0 + nr - 1);
+    const endRow = Math.min(sh.getLastRow(), row0 + nr - 1);
     const n = endRow - startRow + 1;
     if (n <= 0) return;
 
     // Read minimal row values in batch
-    const skuVals  = sh.getRange(startRow, cSku,  n, 1).getValues();
+    const skuVals = sh.getRange(startRow, cSku, n, 1).getValues();
     const prodVals = sh.getRange(startRow, cProd, n, 1).getValues();
-    const varVals  = sh.getRange(startRow, cVar,  n, 1).getValues();
-    const ordVals  = cOrder ? sh.getRange(startRow, cOrder, n, 1).getValues() : null;
+    const varVals = sh.getRange(startRow, cVar, n, 1).getValues();
+    const ordVals = cOrder ? sh.getRange(startRow, cOrder, n, 1).getValues() : null;
 
     const catalogIdx = sku_getCatalogIndex_(false) || {};
 
@@ -414,8 +414,8 @@ function purchasesOnEditSku_(e) {
 
     for (let i = 0; i < n; i++) {
       const orderId = ordVals ? String(ordVals[i][0] || '').trim() : '';
-      const prod    = prodVals[i][0];
-      const vari    = varVals[i][0];
+      const prod = prodVals[i][0];
+      const vari = varVals[i][0];
 
       const skuRaw = skuVals[i][0];
 
@@ -469,5 +469,5 @@ function testSkuUtils_() {
 function sku_rebuildCatalogIndex_() {
   sku_clearCatalogIndexCache_();
   sku_getCatalogIndex_(true);
-  SpreadsheetApp.getUi().alert('✅ Catalog SKU index rebuilt.');
+  safeAlert_('✅ Catalog SKU index rebuilt.');
 }

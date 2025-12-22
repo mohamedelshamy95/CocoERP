@@ -104,15 +104,15 @@ function setupSalesLayout() {
  */
 function syncSalesFromOrdersSheet() {
   try {
-    const salesSh   = getSheet_(APP.SHEETS.SALES_EG);
-    const ledgerSh  = getSheet_(APP.SHEETS.INVENTORY_TXNS);
-    const invEgSh   = getSheet_(APP.SHEETS.INVENTORY_EG);
+    const salesSh = getSheet_(APP.SHEETS.SALES_EG);
+    const ledgerSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
+    const invEgSh = getSheet_(APP.SHEETS.INVENTORY_EG);
     const catalogSh = getSheet_(APP.SHEETS.CATALOG_EG);
 
-    const salesMap  = getHeaderMap_(salesSh);
-    const lastRow   = salesSh.getLastRow();
+    const salesMap = getHeaderMap_(salesSh);
+    const lastRow = salesSh.getLastRow();
     if (lastRow < 2) {
-      SpreadsheetApp.getUi().alert('Sales_EG: لا توجد صفوف بيانات لمزامنتها.');
+      safeAlert_('Sales_EG: لا توجد صفوف بيانات لمزامنتها.');
       return;
     }
 
@@ -120,43 +120,43 @@ function syncSalesFromOrdersSheet() {
       .getRange(2, 1, lastRow - 1, salesSh.getLastColumn())
       .getValues();
 
-    const idxOrderId   = salesMap[APP.COLS.SALES_EG.ORDER_ID]       - 1;
-    const idxSku       = salesMap[APP.COLS.SALES_EG.SKU]            - 1;
-    const idxWh        = salesMap[APP.COLS.SALES_EG.WAREHOUSE]      - 1;
-    const idxQty       = salesMap[APP.COLS.SALES_EG.QTY]            - 1;
-    const idxStatus    = salesMap[APP.COLS.SALES_EG.ORDER_STATUS]   - 1;
+    const idxOrderId = salesMap[APP.COLS.SALES_EG.ORDER_ID] - 1;
+    const idxSku = salesMap[APP.COLS.SALES_EG.SKU] - 1;
+    const idxWh = salesMap[APP.COLS.SALES_EG.WAREHOUSE] - 1;
+    const idxQty = salesMap[APP.COLS.SALES_EG.QTY] - 1;
+    const idxStatus = salesMap[APP.COLS.SALES_EG.ORDER_STATUS] - 1;
     const idxDelivDate = salesMap[APP.COLS.SALES_EG.DELIVERED_DATE] - 1;
-    const idxUnitPrice = salesMap[APP.COLS.SALES_EG.UNIT_PRICE]     - 1;
-    const idxProdName  = salesMap[APP.COLS.SALES_EG.PRODUCT_NAME]   - 1;
-    const idxVariant   = salesMap[APP.COLS.SALES_EG.VARIANT]        - 1;
+    const idxUnitPrice = salesMap[APP.COLS.SALES_EG.UNIT_PRICE] - 1;
+    const idxProdName = salesMap[APP.COLS.SALES_EG.PRODUCT_NAME] - 1;
+    const idxVariant = salesMap[APP.COLS.SALES_EG.VARIANT] - 1;
     // Delivered detector: prefer AppCore helper when available
     const isDelivered_ = (typeof isDeliveredStatus_ === 'function')
       ? isDeliveredStatus_
       : function (st) {
-          if (!st) return false;
-          const s = String(st).trim().toLowerCase();
-          return (s === 'delivered' || s.includes('deliv') || s.includes('تسليم') || s.includes('توصيل'));
-        };
-   // Strong guards: required columns (fail fast with clear error)
-     assertRequiredColumns_(salesSh, [
-       APP.COLS.SALES_EG.ORDER_ID,
-       APP.COLS.SALES_EG.SKU,
-       APP.COLS.SALES_EG.WAREHOUSE,
-       APP.COLS.SALES_EG.QTY,
-       APP.COLS.SALES_EG.ORDER_STATUS,
-       APP.COLS.SALES_EG.DELIVERED_DATE,
-       APP.COLS.SALES_EG.UNIT_PRICE,
-       APP.COLS.SALES_EG.PRODUCT_NAME,
-       APP.COLS.SALES_EG.VARIANT
-     ]); 
+        if (!st) return false;
+        const s = String(st).trim().toLowerCase();
+        return (s === 'delivered' || s.includes('deliv') || s.includes('تسليم') || s.includes('توصيل'));
+      };
+    // Strong guards: required columns (fail fast with clear error)
+    assertRequiredColumns_(salesSh, [
+      APP.COLS.SALES_EG.ORDER_ID,
+      APP.COLS.SALES_EG.SKU,
+      APP.COLS.SALES_EG.WAREHOUSE,
+      APP.COLS.SALES_EG.QTY,
+      APP.COLS.SALES_EG.ORDER_STATUS,
+      APP.COLS.SALES_EG.DELIVERED_DATE,
+      APP.COLS.SALES_EG.UNIT_PRICE,
+      APP.COLS.SALES_EG.PRODUCT_NAME,
+      APP.COLS.SALES_EG.VARIANT
+    ]);
 
-     assertRequiredColumns_(ledgerSh, [
-       APP.COLS.INV_TXNS.SOURCE_TYPE,
-       APP.COLS.INV_TXNS.SOURCE_ID,
-       APP.COLS.INV_TXNS.SKU,
-       APP.COLS.INV_TXNS.WAREHOUSE,
-       APP.COLS.INV_TXNS.QTY_OUT
-     ]);
+    assertRequiredColumns_(ledgerSh, [
+      APP.COLS.INV_TXNS.SOURCE_TYPE,
+      APP.COLS.INV_TXNS.SOURCE_ID,
+      APP.COLS.INV_TXNS.SKU,
+      APP.COLS.INV_TXNS.WAREHOUSE,
+      APP.COLS.INV_TXNS.QTY_OUT
+    ]);
 
     // --------- 1) نجمع مبيعات Sales_EG ----------
     /**
@@ -166,15 +166,15 @@ function syncSalesFromOrdersSheet() {
     const salesAgg = {};
 
     data.forEach(function (row) {
-      const orderId      = row[idxOrderId];
-      const skuRaw       = row[idxSku];
+      const orderId = row[idxOrderId];
+      const skuRaw = row[idxSku];
       const warehouseRaw = row[idxWh];
-      const qty          = Number(row[idxQty] || 0);
-      const status       = row[idxStatus];
-      const delDate      = row[idxDelivDate];
+      const qty = Number(row[idxQty] || 0);
+      const status = row[idxStatus];
+      const delDate = row[idxDelivDate];
 
       const sku = (skuRaw || '').toString().trim();
-      let wh    = (warehouseRaw || '').toString().trim();
+      let wh = (warehouseRaw || '').toString().trim();
 
       if (!orderId || !sku || !qty) return;
       if (!wh) wh = (APP && APP.WAREHOUSES && APP.WAREHOUSES.EG_CAI) ? APP.WAREHOUSES.EG_CAI : 'EG-CAI';
@@ -209,7 +209,7 @@ function syncSalesFromOrdersSheet() {
 
     // لو مفيش ولا صف Delivered
     if (!Object.keys(salesAgg).length) {
-      SpreadsheetApp.getUi().alert('Sales_EG: لا توجد صفوف Delivered لمزامنتها.');
+      safeAlert_('Sales_EG: لا توجد صفوف Delivered لمزامنتها.');
       return;
     }
 
@@ -228,19 +228,19 @@ function syncSalesFromOrdersSheet() {
         .getValues();
 
       const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
-      const idxSrcId   = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID]   - 1;
-      const idxSkuL    = ledgerMap[APP.COLS.INV_TXNS.SKU]         - 1;
-      const idxWhL     = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE]   - 1;
-      const idxQtyOut  = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT]     - 1;
+      const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
+      const idxSkuL = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
+      const idxWhL = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
+      const idxQtyOut = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
 
       ledData.forEach(function (row) {
         const srcType = (row[idxSrcType] || '').toString().trim();
         if (srcType !== 'SALE_EG') return;
 
         const orderId = row[idxSrcId];
-        const sku     = (row[idxSkuL] || '').toString().trim();
-        const wh      = (row[idxWhL]  || '').toString().trim();
-        const qtyOut  = Number(row[idxQtyOut] || 0);
+        const sku = (row[idxSkuL] || '').toString().trim();
+        const wh = (row[idxWhL] || '').toString().trim();
+        const qtyOut = Number(row[idxQtyOut] || 0);
 
         if (!orderId || !sku || !wh || !qtyOut) return;
 
@@ -251,23 +251,23 @@ function syncSalesFromOrdersSheet() {
 
     // --------- 3) Cost map من Inventory_EG + fallback Catalog ----------
     const costBySkuWh = {};
-    const invEgMap    = getHeaderMap_(invEgSh);
-    const invEgLast   = invEgSh.getLastRow();
+    const invEgMap = getHeaderMap_(invEgSh);
+    const invEgLast = invEgSh.getLastRow();
 
     if (invEgLast >= 2) {
       const invData = invEgSh
         .getRange(2, 1, invEgLast - 1, invEgSh.getLastColumn())
         .getValues();
 
-      const idxSkuInv  = invEgMap['SKU']             - 1;
-      const idxWhInv   = invEgMap['Warehouse (EG)']  - 1;
-      const idxAvgCost = invEgMap['Avg Cost (EGP)']  - 1;
+      const idxSkuInv = invEgMap['SKU'] - 1;
+      const idxWhInv = invEgMap['Warehouse (EG)'] - 1;
+      const idxAvgCost = invEgMap['Avg Cost (EGP)'] - 1;
 
       invData.forEach(function (row) {
         const sku = (row[idxSkuInv] || '').toString().trim();
-        const wh  = (row[idxWhInv]  || '').toString().trim();
+        const wh = (row[idxWhInv] || '').toString().trim();
         if (!sku || !wh) return;
-        const key  = sku + '||' + wh;
+        const key = sku + '||' + wh;
         const cost = Number(row[idxAvgCost] || 0);
         if (cost) costBySkuWh[key] = cost;
       });
@@ -275,41 +275,41 @@ function syncSalesFromOrdersSheet() {
 
     // كتالوج: فى حالة عدم توفر Cost من Inventory_EG
     const catalogMap = getHeaderMap_(catalogSh);
-    const catLast    = catalogSh.getLastRow();
-    let catData      = [];
+    const catLast = catalogSh.getLastRow();
+    let catData = [];
     let idxSkuCat, idxProdCat, idxVarCat, idxCostCat;
 
     if (catLast >= 2) {
-      catData   = catalogSh.getRange(2, 1, catLast - 1, catalogSh.getLastColumn()).getValues();
-      idxSkuCat = catalogMap['SKU']                - 1;
-      idxProdCat= catalogMap['Product Name']       - 1;
-      idxVarCat = catalogMap['Variant / Color']    - 1;
-      idxCostCat= catalogMap['Default Cost (EGP)'] - 1;
+      catData = catalogSh.getRange(2, 1, catLast - 1, catalogSh.getLastColumn()).getValues();
+      idxSkuCat = catalogMap['SKU'] - 1;
+      idxProdCat = catalogMap['Product Name'] - 1;
+      idxVarCat = catalogMap['Variant / Color'] - 1;
+      idxCostCat = catalogMap['Default Cost (EGP)'] - 1;
     }
 
     function normSku_(s) {
-  return String(s || '').trim().toUpperCase().replace(/\s+/g, '');
-}
-
-const catBySku = {};
-if (catData.length && idxSkuCat >= 0) {
-  for (let i = 0; i < catData.length; i++) {
-    const k = normSku_(catData[i][idxSkuCat]);
-    if (!k) continue;
-    if (!catBySku[k]) {
-      catBySku[k] = {
-        product: catData[i][idxProdCat] || '',
-        variant: catData[i][idxVarCat]  || '',
-        cost: Number(catData[i][idxCostCat] || 0)
-      };
+      return String(s || '').trim().toUpperCase().replace(/\s+/g, '');
     }
-  }
-}
 
-function lookupCatalog_(sku) {
-  const k = normSku_(sku);
-  return k ? (catBySku[k] || null) : null;
-}
+    const catBySku = {};
+    if (catData.length && idxSkuCat >= 0) {
+      for (let i = 0; i < catData.length; i++) {
+        const k = normSku_(catData[i][idxSkuCat]);
+        if (!k) continue;
+        if (!catBySku[k]) {
+          catBySku[k] = {
+            product: catData[i][idxProdCat] || '',
+            variant: catData[i][idxVarCat] || '',
+            cost: Number(catData[i][idxCostCat] || 0)
+          };
+        }
+      }
+    }
+
+    function lookupCatalog_(sku) {
+      const k = normSku_(sku);
+      return k ? (catBySku[k] || null) : null;
+    }
 
     // --------- 4) حساب الـ delta وتسجيل الحركات ----------
     let newTxns = 0;
@@ -317,9 +317,9 @@ function lookupCatalog_(sku) {
     const txns = [];
 
     Object.keys(salesAgg).forEach(function (key) {
-      const rec       = salesAgg[key];
-      const already   = ledgerAgg[key] || 0;
-      const deltaQty  = rec.qty - already;
+      const rec = salesAgg[key];
+      const already = ledgerAgg[key] || 0;
+      const deltaQty = rec.qty - already;
 
       if (deltaQty <= 0) {
         skipped++;
@@ -327,7 +327,7 @@ function lookupCatalog_(sku) {
       }
 
       const costKey = rec.sku + '||' + rec.warehouse;
-      let unitCost  = costBySkuWh[costKey] || 0;
+      let unitCost = costBySkuWh[costKey] || 0;
       const catInfo = lookupCatalog_(rec.sku);
 
       if (!unitCost && catInfo && catInfo.cost) {
@@ -335,7 +335,7 @@ function lookupCatalog_(sku) {
       }
 
       const prodName = rec.productName || (catInfo && catInfo.product) || rec.sku;
-      const variant  = rec.variant     || (catInfo && catInfo.variant) || '';
+      const variant = rec.variant || (catInfo && catInfo.variant) || '';
 
       txns.push({
         type: 'OUT',
@@ -370,7 +370,7 @@ function lookupCatalog_(sku) {
     if (txns.length && typeof rebuildInventoryEGFromLedger === 'function') {
       rebuildInventoryEGFromLedger();
     }
-SpreadsheetApp.getUi().alert(
+    safeAlert_(
       'Sales_EG sync done.\n\n' +
       'New txns: ' + newTxns + '\n' +
       'Skipped (not delivered / already synced / no delta / invalid): ' + skipped
@@ -404,16 +404,16 @@ function salesEgOnEdit_(e) {
     const map = getHeaderMap_(sheet);
 
     const rowStart = e.range.getRow();
-    const rowEnd   = rowStart + e.range.getNumRows() - 1;
+    const rowEnd = rowStart + e.range.getNumRows() - 1;
     const colStart = e.range.getColumn();
-    const colEnd   = colStart + e.range.getNumColumns() - 1;
+    const colEnd = colStart + e.range.getNumColumns() - 1;
 
-    const skuCol       = map[APP.COLS.SALES_EG.SKU];
-    const qtyCol       = map[APP.COLS.SALES_EG.QTY];
+    const skuCol = map[APP.COLS.SALES_EG.SKU];
+    const qtyCol = map[APP.COLS.SALES_EG.QTY];
     const unitPriceCol = map[APP.COLS.SALES_EG.UNIT_PRICE];
-    const discountCol  = map[APP.COLS.SALES_EG.DISCOUNT];
-    const shipFeeCol   = map[APP.COLS.SALES_EG.SHIPPING_FEE];
-    const statusCol    = map[APP.COLS.SALES_EG.ORDER_STATUS];
+    const discountCol = map[APP.COLS.SALES_EG.DISCOUNT];
+    const shipFeeCol = map[APP.COLS.SALES_EG.SHIPPING_FEE];
+    const statusCol = map[APP.COLS.SALES_EG.ORDER_STATUS];
     const deliveredCol = map[APP.COLS.SALES_EG.DELIVERED_DATE];
 
     const touchesCol_ = function (c) {
@@ -466,11 +466,11 @@ function salesEgOnEdit_(e) {
  * يملأ بيانات صف واحد في Sales_EG من الكتالوج بناءً على الـ SKU.
  */
 function salesEgBackfillFromCatalog_(sheet, map, row) {
-  const skuCol       = map[APP.COLS.SALES_EG.SKU];
-  const prodCol      = map[APP.COLS.SALES_EG.PRODUCT_NAME];
-  const variantCol   = map[APP.COLS.SALES_EG.VARIANT];
+  const skuCol = map[APP.COLS.SALES_EG.SKU];
+  const prodCol = map[APP.COLS.SALES_EG.PRODUCT_NAME];
+  const variantCol = map[APP.COLS.SALES_EG.VARIANT];
   const unitPriceCol = map[APP.COLS.SALES_EG.UNIT_PRICE];
-  const whCol        = map[APP.COLS.SALES_EG.WAREHOUSE];
+  const whCol = map[APP.COLS.SALES_EG.WAREHOUSE];
 
   if (!skuCol) return;
 
@@ -479,7 +479,7 @@ function salesEgBackfillFromCatalog_(sheet, map, row) {
 
   const cat = catalogLookupBySku_(sku);
   if (cat) {
-    if (prodCol)    sheet.getRange(row, prodCol).setValue(cat.productName);
+    if (prodCol) sheet.getRange(row, prodCol).setValue(cat.productName);
     if (variantCol) sheet.getRange(row, variantCol).setValue(cat.variant);
     if (unitPriceCol && cat.defaultPriceEgp != null) {
       const cell = sheet.getRange(row, unitPriceCol);
@@ -530,24 +530,24 @@ function catalogLookupBySku_(sku) {
   let idx = null;
   const cached = cache.get(cacheKey);
   if (cached) {
-    try { idx = JSON.parse(cached); } catch (e) {}
+    try { idx = JSON.parse(cached); } catch (e) { }
   }
 
   if (!idx) {
-    const catSh  = getSheet_(APP.SHEETS.CATALOG_EG);
-    try { normalizeHeaders_(catSh, 1); } catch (e) {}
+    const catSh = getSheet_(APP.SHEETS.CATALOG_EG);
+    try { normalizeHeaders_(catSh, 1); } catch (e) { }
     const catMap = getHeaderMap_(catSh);
 
     const lastRow = catSh.getLastRow();
     idx = {};
 
     if (lastRow >= 2) {
-      const skuCol      = catMap['SKU'];
-      const prodCol     = catMap['Product Name'];
-      const variantCol  = catMap['Variant / Color'];
-      const brandCol    = catMap['Brand'];
+      const skuCol = catMap['SKU'];
+      const prodCol = catMap['Product Name'];
+      const variantCol = catMap['Variant / Color'];
+      const brandCol = catMap['Brand'];
       const defPriceCol = catMap['Default Price (EGP)'];
-      const defCostCol  = catMap['Default Cost (EGP)'];
+      const defCostCol = catMap['Default Cost (EGP)'];
 
       if (skuCol) {
         const data = catSh
@@ -559,11 +559,11 @@ function catalogLookupBySku_(sku) {
           if (!rowSku) continue;
           if (!idx[rowSku]) {
             idx[rowSku] = {
-              productName:     prodCol     ? (data[i][prodCol - 1] || '') : '',
-              variant:         variantCol  ? (data[i][variantCol - 1] || '') : '',
+              productName: prodCol ? (data[i][prodCol - 1] || '') : '',
+              variant: variantCol ? (data[i][variantCol - 1] || '') : '',
               defaultPriceEgp: defPriceCol ? Number(data[i][defPriceCol - 1] || 0) : null,
-              defaultCostEgp:  defCostCol  ? Number(data[i][defCostCol - 1] || 0) : 0,
-              brand:           brandCol    ? (data[i][brandCol - 1] || '') : ''
+              defaultCostEgp: defCostCol ? Number(data[i][defCostCol - 1] || 0) : 0,
+              brand: brandCol ? (data[i][brandCol - 1] || '') : ''
             };
           }
         }
@@ -586,19 +586,19 @@ function catalogLookupBySku_(sku) {
  * @param {number} row رقم الصف المراد حسابه
  */
 function recalcSalesRowAmounts_(sheet, map, row) {
-  const qtyCol       = map[APP.COLS.SALES_EG.QTY];
+  const qtyCol = map[APP.COLS.SALES_EG.QTY];
   const unitPriceCol = map[APP.COLS.SALES_EG.UNIT_PRICE];
-  const totalCol     = map[APP.COLS.SALES_EG.TOTAL_PRICE];
-  const discountCol  = map[APP.COLS.SALES_EG.DISCOUNT];
-  const shipFeeCol   = map[APP.COLS.SALES_EG.SHIPPING_FEE];
-  const netRevCol    = map[APP.COLS.SALES_EG.NET_REVENUE];
+  const totalCol = map[APP.COLS.SALES_EG.TOTAL_PRICE];
+  const discountCol = map[APP.COLS.SALES_EG.DISCOUNT];
+  const shipFeeCol = map[APP.COLS.SALES_EG.SHIPPING_FEE];
+  const netRevCol = map[APP.COLS.SALES_EG.NET_REVENUE];
 
   if (!qtyCol || !unitPriceCol) return;
 
-  const qty       = Number(sheet.getRange(row, qtyCol).getValue()       || 0);
+  const qty = Number(sheet.getRange(row, qtyCol).getValue() || 0);
   const unitPrice = Number(sheet.getRange(row, unitPriceCol).getValue() || 0);
-  const discount  = discountCol ? Number(sheet.getRange(row, discountCol).getValue() || 0) : 0;
-  const shipFee   = shipFeeCol  ? Number(sheet.getRange(row, shipFeeCol).getValue()  || 0) : 0;
+  const discount = discountCol ? Number(sheet.getRange(row, discountCol).getValue() || 0) : 0;
+  const shipFee = shipFeeCol ? Number(sheet.getRange(row, shipFeeCol).getValue() || 0) : 0;
 
   const total = qty * unitPrice;
   if (totalCol) {
@@ -624,17 +624,17 @@ function testCatalogLookup() {
  */
 function salesEgBackfillFromCatalog() {
   try {
-    const sh  = getSheet_(APP.SHEETS.SALES_EG);
+    const sh = getSheet_(APP.SHEETS.SALES_EG);
     const map = getHeaderMap_(sh);
     const lastRow = sh.getLastRow();
     if (lastRow < 2) {
-      SpreadsheetApp.getUi().alert('Sales_EG: لا يوجد بيانات.');
+      safeAlert_('Sales_EG: لا يوجد بيانات.');
       return;
     }
 
-    const skuCol       = map[APP.COLS.SALES_EG.SKU];
-    const prodCol      = map[APP.COLS.SALES_EG.PRODUCT_NAME];
-    const variantCol   = map[APP.COLS.SALES_EG.VARIANT];
+    const skuCol = map[APP.COLS.SALES_EG.SKU];
+    const prodCol = map[APP.COLS.SALES_EG.PRODUCT_NAME];
+    const variantCol = map[APP.COLS.SALES_EG.VARIANT];
     const unitPriceCol = map[APP.COLS.SALES_EG.UNIT_PRICE];
 
     const rng = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn());
@@ -661,7 +661,7 @@ function salesEgBackfillFromCatalog() {
 
     rng.setValues(values);
 
-    SpreadsheetApp.getUi().alert('تم ملء بيانات المنتج من الكتالوج بنجاح ✅');
+    safeAlert_('تم ملء بيانات المنتج من الكتالوج بنجاح ✅');
 
   } catch (err) {
     logError_('salesEgBackfillFromCatalog', err);

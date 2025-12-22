@@ -85,7 +85,7 @@ function setupCatalogEgLayout() {
     // إضافة الـ Data Validation للأعمدة المطلوبة
     catalog_applyDataValidation_(sh);
 
-    SpreadsheetApp.getUi().alert('Catalog_EG sheet is ready ✔️');
+    safeAlert_('Catalog_EG sheet is ready ✔️');
 
   } catch (e) {
     logError_('setupCatalogEgLayout', e);
@@ -147,8 +147,8 @@ function catalog_applyDataValidation_(sh) {
 function catalog_syncFromInventoryEg() {
   try {
     const catalogSh = getSheet_(APP.SHEETS.CATALOG_EG);
-    const invSh     = getSheet_(APP.SHEETS.INVENTORY_EG);
-    const purchSh   = getSheet_(APP.SHEETS.PURCHASES);
+    const invSh = getSheet_(APP.SHEETS.INVENTORY_EG);
+    const purchSh = getSheet_(APP.SHEETS.PURCHASES);
 
     // ===== Validate & maps =====
     const catMap = assertRequiredColumns_(catalogSh, CATALOG_HEADERS);
@@ -169,14 +169,14 @@ function catalog_syncFromInventoryEg() {
     const lastPurRow = purchSh.getLastRow();
 
     if (lastPurRow >= 2 &&
-        purchMap[APP.COLS.PURCHASES.SKU] &&
-        purchMap[APP.COLS.PURCHASES.SELLER]) {
+      purchMap[APP.COLS.PURCHASES.SKU] &&
+      purchMap[APP.COLS.PURCHASES.SELLER]) {
 
       const purData = purchSh
         .getRange(2, 1, lastPurRow - 1, purchSh.getLastColumn())
         .getValues();
 
-      const idxSku    = purchMap[APP.COLS.PURCHASES.SKU]    - 1;
+      const idxSku = purchMap[APP.COLS.PURCHASES.SKU] - 1;
       const idxSeller = purchMap[APP.COLS.PURCHASES.SELLER] - 1;
 
       purData.forEach(function (row) {
@@ -195,7 +195,7 @@ function catalog_syncFromInventoryEg() {
     // ===== Build Inventory snapshot map by SKU =====
     const lastInvRow = invSh.getLastRow();
     if (lastInvRow < 2) {
-      SpreadsheetApp.getUi().alert('No data in Inventory_EG to sync from.');
+      safeAlert_('No data in Inventory_EG to sync from.');
       return;
     }
 
@@ -203,10 +203,10 @@ function catalog_syncFromInventoryEg() {
       .getRange(2, 1, lastInvRow - 1, invSh.getLastColumn())
       .getValues();
 
-    const idxInvSku   = invMap['SKU']             - 1;
-    const idxInvProd  = invMap['Product Name']    - 1;
-    const idxInvVar   = invMap['Variant / Color'] - 1;
-    const idxInvAvg   = invMap['Avg Cost (EGP)']  - 1;
+    const idxInvSku = invMap['SKU'] - 1;
+    const idxInvProd = invMap['Product Name'] - 1;
+    const idxInvVar = invMap['Variant / Color'] - 1;
+    const idxInvAvg = invMap['Avg Cost (EGP)'] - 1;
 
     const invBySku = {};
     invData.forEach(function (row) {
@@ -216,20 +216,20 @@ function catalog_syncFromInventoryEg() {
       if (!invBySku[sku]) {
         invBySku[sku] = {
           productName: row[idxInvProd] || '',
-          variant:     row[idxInvVar]  || '',
-          avgCost:     Number(row[idxInvAvg] || 0)
+          variant: row[idxInvVar] || '',
+          avgCost: Number(row[idxInvAvg] || 0)
         };
       }
     });
 
     if (Object.keys(invBySku).length === 0) {
-      SpreadsheetApp.getUi().alert('No SKUs found in Inventory_EG to sync.');
+      safeAlert_('No SKUs found in Inventory_EG to sync.');
       return;
     }
 
     // ===== Read current catalog data =====
     const lastCatRow = catalogSh.getLastRow();
-    const totalCols  = maxHeaderCol;
+    const totalCols = maxHeaderCol;
 
     let catalogData = [];
     if (lastCatRow >= 2) {
@@ -238,10 +238,10 @@ function catalog_syncFromInventoryEg() {
         .getValues();
     }
 
-    const idxCatSku     = catMap['SKU']                - 1;
-    const idxCatProd    = catMap['Product Name']       - 1;
-    const idxCatVar     = catMap['Variant / Color']    - 1;
-    const idxCatBrand   = catMap['Brand']              - 1;
+    const idxCatSku = catMap['SKU'] - 1;
+    const idxCatProd = catMap['Product Name'] - 1;
+    const idxCatVar = catMap['Variant / Color'] - 1;
+    const idxCatBrand = catMap['Brand'] - 1;
     const idxCatDefCost = catMap['Default Cost (EGP)'] - 1;
 
     const catRowBySku = {};
@@ -254,19 +254,19 @@ function catalog_syncFromInventoryEg() {
 
     // لا نحتاج headersOrdered طالما سنبني صفًا بطول totalCols ونضع القيم حسب مواقع الأعمدة الفعلية.
 
-    let added   = 0;
+    let added = 0;
     let updated = 0;
 
     // ===== Sync loop =====
     Object.keys(invBySku).forEach(function (sku) {
       const invInfo = invBySku[sku];
-      const brand   = brandBySku[sku] || '';
+      const brand = brandBySku[sku] || '';
       const avgCost = invInfo.avgCost || 0;
 
       if (catRowBySku.hasOwnProperty(sku)) {
         // تحديث صف موجود
         const rowIdx = catRowBySku[sku];
-        const row    = catalogData[rowIdx];
+        const row = catalogData[rowIdx];
 
         if (!row[idxCatProd] && invInfo.productName) {
           row[idxCatProd] = invInfo.productName;
@@ -288,9 +288,9 @@ function catalog_syncFromInventoryEg() {
         // إضافة SKU جديد
         const newRow = new Array(totalCols).fill('');
         newRow[idxCatSku] = sku;
-        if (idxCatProd >= 0)    newRow[idxCatProd] = invInfo.productName || '';
-        if (idxCatVar >= 0)     newRow[idxCatVar] = invInfo.variant || '';
-        if (idxCatBrand >= 0)   newRow[idxCatBrand] = brand || '';
+        if (idxCatProd >= 0) newRow[idxCatProd] = invInfo.productName || '';
+        if (idxCatVar >= 0) newRow[idxCatVar] = invInfo.variant || '';
+        if (idxCatBrand >= 0) newRow[idxCatBrand] = brand || '';
         if (idxCatDefCost >= 0) newRow[idxCatDefCost] = avgCost || '';
 
         catalogData.push(newRow);
@@ -314,7 +314,7 @@ function catalog_syncFromInventoryEg() {
     // نضمن إن الـ Drop-down موجودة لأي صفوف جديدة
     catalog_applyDataValidation_(catalogSh);
 
-    SpreadsheetApp.getUi().alert(
+    safeAlert_(
       'Catalog sync done.\n\n' +
       'New SKUs added: ' + added + '\n' +
       'Existing SKUs updated: ' + updated

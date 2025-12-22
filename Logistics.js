@@ -82,7 +82,7 @@ const SHIP_UAE_EG_HEADERS = [
   APP.COLS.SHIP_UAE_EG.CUSTOMS,
   APP.COLS.SHIP_UAE_EG.OTHER,
   APP.COLS.SHIP_UAE_EG.TOTAL_COST,
-  
+
 
   APP.COLS.PURCHASES.NOTES
 ];
@@ -94,7 +94,7 @@ const SHIP_UAE_EG_HEADERS = [
 function setupQcLayout() {
   try {
     setupQC_UAE_();
-    SpreadsheetApp.getUi().alert('تم تجهيز شيت QC_UAE ✔️');
+    safeAlert_('تم تجهيز شيت QC_UAE ✔️');
   } catch (e) {
     logError_('setupQcLayout', e);
     throw e;
@@ -105,7 +105,7 @@ function setupShipmentsLayouts() {
   try {
     setupShipmentsCnUae_();
     setupShipmentsUaeEg_();
-    SpreadsheetApp.getUi().alert('تم تجهيز شيتات الشحن (CN→UAE + UAE→EG) ✔️');
+    safeAlert_('تم تجهيز شيتات الشحن (CN→UAE + UAE→EG) ✔️');
   } catch (e) {
     logError_('setupShipmentsLayouts', e);
     throw e;
@@ -117,7 +117,7 @@ function setupLogisticsLayout() {
     setupQC_UAE_();
     setupShipmentsCnUae_();
     setupShipmentsUaeEg_();
-    SpreadsheetApp.getUi().alert('تم تجهيز شيتات اللوجستيك (QC + Shipments) ✔️');
+    safeAlert_('تم تجهيز شيتات اللوجستيك (QC + Shipments) ✔️');
   } catch (e) {
     logError_('setupLogisticsLayout', e);
     throw e;
@@ -251,9 +251,9 @@ function _setupSheetWithHeaders_(sheet, headers, opts) {
   hdr.setFontWeight('bold');
 
   // Freeze header row for usability
-  try { sheet.setFrozenRows(Math.max(1, freezeRows)); } catch (e) {}
+  try { sheet.setFrozenRows(Math.max(1, freezeRows)); } catch (e) { }
   if (freezeCols) {
-    try { sheet.setFrozenColumns(Math.max(1, freezeCols)); } catch (e) {}
+    try { sheet.setFrozenColumns(Math.max(1, freezeCols)); } catch (e) { }
   }
 }
 
