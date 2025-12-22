@@ -1,0 +1,335 @@
+diff --git a/AppCore.js b/AppCore.js
+--- a/AppCore.js
++++ b/AppCore.js
+@@ -518,8 +518,19 @@
+   let s = String(wh).trim().toUpperCase();
+   s = s.replace(/[_\s]+/g, '-');
+   s = s.replace(/-+/g, '-').replace(/^-+|-+$/g, '');
++
++  // Canonical warehouses used by CocoERP v2.1:
++  // UAE: KOR, ATTIA
++  // EG : TAN-GH
++  //
++  // Keep legacy prefixes, but collapse known aliases to canonical codes.
++  if (s === 'UAE-KOR') return 'KOR';
++  if (s === 'UAE-ATTIA') return 'ATTIA';
++  if (s === 'TAN_GH' || s === 'TAN - GH') return 'TAN-GH';
++
+   return s;
+ }
++
+ 
+ /**
+  * Delivered status detector (Arabic + English).
+diff --git a/InventoryCore.js b/InventoryCore.js
+--- a/InventoryCore.js
++++ b/InventoryCore.js
+@@ -386,6 +386,7 @@
+ 
+   // Map payload keys by header label (canonical)
+   const keyByHeader = {};
++  keyByHeader[APP.COLS.INV_TXNS.TXN_ID]      = 'txnId';
+   keyByHeader[APP.COLS.INV_TXNS.TXN_DATE]    = 'txnDate';
+ keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
+   keyByHeader[APP.COLS.INV_TXNS.SOURCE_ID]   = 'sourceId';
+@@ -413,6 +414,7 @@
+       : String(p.warehouse || '').trim();
+ 
+     const out = {
++      txnId: String(p.txnId || '').trim(),
+       txnDate: txnDate,
+       type: type,
+       sourceType: String(p.sourceType || '').trim(),
+@@ -445,6 +447,11 @@
+       out.totalCostEgp = out.unitCostEgp ? (out.unitCostEgp * basisQty) : 0;
+     }
+ 
++    // Deterministic Txn ID (stable across re-runs)
++    if (!out.txnId && typeof _inv_makeTxnId_ === 'function') {
++      try { out.txnId = _inv_makeTxnId_(out); } catch (e) {}
++    }
++
+     return headers.map(function (h) {
+       const key = keyByHeader[h];
+       return (key ? out[key] : '');
+@@ -895,3 +902,152 @@
+   });
+   inv_rebuildAllSnapshots();
+ }
++/** ===================== ONE-TIME REPAIR HELPERS (MANUAL RUN) ===================== */
++
++/**
++ * Backfill missing Txn IDs in Inventory_Transactions.
++ * Safe to re-run; only fills blank Txn ID cells.
++ */
++function inv_backfillMissingTxnIds() {
++  const lock = LockService.getDocumentLock();
++  lock.waitLock(30000);
++  try {
++    const sh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
++    const map = getHeaderMap_(sh);
++
++    const colTxnId   = map[APP.COLS.INV_TXNS.TXN_ID];
++    const colTxnDate = map[APP.COLS.INV_TXNS.TXN_DATE];
++    const colSrcType = map[APP.COLS.INV_TXNS.SOURCE_TYPE];
++    const colSrcId   = map[APP.COLS.INV_TXNS.SOURCE_ID];
++    const colBatch   = map[APP.COLS.INV_TXNS.BATCH_CODE];
++    const colSku     = map[APP.COLS.INV_TXNS.SKU];
++    const colWh      = map[APP.COLS.INV_TXNS.WAREHOUSE];
++    const colQtyIn   = map[APP.COLS.INV_TXNS.QTY_IN];
++    const colQtyOut  = map[APP.COLS.INV_TXNS.QTY_OUT];
++    const colUnitCost= map[APP.COLS.INV_TXNS.UNIT_COST];
++    const colCurr    = map[APP.COLS.INV_TXNS.CURRENCY];
++    const colUnitOrig= map[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG];
++
++    if (!colTxnId) throw new Error('Missing header: ' + APP.COLS.INV_TXNS.TXN_ID);
++
++    const last = sh.getLastRow();
++    if (last < 2) return 0;
++
++    const data = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
++    const out = [];
++    let changed = 0;
++
++    for (let i = 0; i < data.length; i++) {
++      const r = data[i];
++      const txnId = String(r[colTxnId - 1] || '').trim();
++      if (txnId) {
++        out.push([txnId]);
++        continue;
++      }
++
++      const o = {
++        type: (Number(r[colQtyIn - 1] || 0) > 0) ? 'IN' : 'OUT',
++        sourceType: colSrcType ? String(r[colSrcType - 1] || '').trim() : '',
++        sourceId: colSrcId ? String(r[colSrcId - 1] || '').trim() : '',
++        batchCode: colBatch ? String(r[colBatch - 1] || '').trim() : '',
++        sku: colSku ? String(r[colSku - 1] || '').trim() : '',
++        warehouse: colWh ? String(r[colWh - 1] || '').trim() : '',
++        qtyIn: colQtyIn ? Number(r[colQtyIn - 1] || 0) : 0,
++        qtyOut: colQtyOut ? Number(r[colQtyOut - 1] || 0) : 0,
++        unitCostEgp: colUnitCost ? Number(r[colUnitCost - 1] || 0) : 0,
++        currency: colCurr ? String(r[colCurr - 1] || '').trim() : '',
++        unitPriceOrig: colUnitOrig ? Number(r[colUnitOrig - 1] || 0) : 0,
++        txnDate: colTxnDate ? r[colTxnDate - 1] : ''
++      };
++
++      const newId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_(o) : '';
++      out.push([newId]);
++      changed++;
++    }
++
++    if (changed) {
++      sh.getRange(2, colTxnId, out.length, 1).setValues(out);
++    }
++
++    return changed;
++  } finally {
++    lock.releaseLock();
++  }
++}
++
++/**
++ * Repair QC_UAE ledger warehouse values by re-reading Warehouse (UAE) from QC_UAE sheet.
++ * Fixes cases where ledger was written with a fallback value (e.g., UAE-DXB) instead of KOR/ATTIA.
++ *
++ * Criteria:
++ *  - Inventory_Transactions.Source Type == 'QC_UAE'
++ *  - Inventory_Transactions.Source ID is a QC ID
++ */
++function inv_repairQcUaeLedgerWarehousesFromQcSheet() {
++  const lock = LockService.getDocumentLock();
++  lock.waitLock(30000);
++  try {
++    const qcSh = getSheet_(APP.SHEETS.QC_UAE);
++    const ledgerSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
++
++    const qcMap = getHeaderMap_(qcSh);
++    const ledMap = getHeaderMap_(ledgerSh);
++
++    const qcIdCol = qcMap[APP.COLS.QC_UAE.QC_ID] || qcMap['QC ID'];
++    const qcWhCol = qcMap[APP.COLS.QC_UAE.WAREHOUSE] || qcMap['Warehouse (UAE)'];
++
++    const colSrcType = ledMap[APP.COLS.INV_TXNS.SOURCE_TYPE];
++    const colSrcId   = ledMap[APP.COLS.INV_TXNS.SOURCE_ID];
++    const colWh      = ledMap[APP.COLS.INV_TXNS.WAREHOUSE];
++
++    if (!qcIdCol || !qcWhCol) throw new Error('QC_UAE headers missing (QC ID / Warehouse (UAE))');
++    if (!colSrcType || !colSrcId || !colWh) throw new Error('Inventory_Transactions headers missing (Source Type / Source ID / Warehouse)');
++
++    // Build QC_ID -> Warehouse map
++    const qcLast = qcSh.getLastRow();
++    if (qcLast < 2) return 0;
++    const qcData = qcSh.getRange(2, 1, qcLast - 1, qcSh.getLastColumn()).getValues();
++
++    const qcWhById = new Map();
++    for (let i = 0; i < qcData.length; i++) {
++      const r = qcData[i];
++      const qcId = String(r[qcIdCol - 1] || '').trim();
++      if (!qcId) continue;
++      const raw = String(r[qcWhCol - 1] || '').trim();
++      const wh = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(raw) : raw;
++      if (wh) qcWhById.set(qcId, wh);
++    }
++
++    const ledLast = ledgerSh.getLastRow();
++    if (ledLast < 2) return 0;
++    const ledData = ledgerSh.getRange(2, 1, ledLast - 1, ledgerSh.getLastColumn()).getValues();
++
++    const outWh = [];
++    let changed = 0;
++
++    for (let i = 0; i < ledData.length; i++) {
++      const r = ledData[i];
++      const srcType = String(r[colSrcType - 1] || '').trim();
++      if (srcType !== 'QC_UAE') {
++        outWh.push([r[colWh - 1]]);
++        continue;
++      }
++
++      const qcId = String(r[colSrcId - 1] || '').trim();
++      const wh = qcWhById.get(qcId);
++      if (wh && String(r[colWh - 1] || '').trim() !== wh) {
++        outWh.push([wh]);
++        changed++;
++      } else {
++        outWh.push([r[colWh - 1]]);
++      }
++    }
++
++    if (changed) {
++      ledgerSh.getRange(2, colWh, outWh.length, 1).setValues(outWh);
++    }
++    return changed;
++  } finally {
++    lock.releaseLock();
++  }
++}
+diff --git a/ShipmentsCore.js b/ShipmentsCore.js
+--- a/ShipmentsCore.js
++++ b/ShipmentsCore.js
+@@ -1809,6 +1809,8 @@
+     // ===== Build cost map from Purchases =====
+     const purchLast = purchSh.getLastRow();
+     const costMap = {};
++    const currencyMap = {};
++    const unitPriceOrigMap = {};
+ 
+     if (purchLast >= 2) {
+       const purchData = purchSh.getRange(2, 1, purchLast - 1, purchSh.getLastColumn()).getValues();
+@@ -1816,6 +1818,10 @@
+       const idxOrder = purchMap[APP.COLS.PURCHASES.ORDER_ID] ? purchMap[APP.COLS.PURCHASES.ORDER_ID] - 1 : null;
+       const idxSku   = purchMap[APP.COLS.PURCHASES.SKU]      ? purchMap[APP.COLS.PURCHASES.SKU]      - 1 : null;
+       const idxBatch = purchMap[APP.COLS.PURCHASES.BATCH_CODE] ? purchMap[APP.COLS.PURCHASES.BATCH_CODE] - 1 : null;
++
++      const idxQty      = purchMap[APP.COLS.PURCHASES.QTY]       ? purchMap[APP.COLS.PURCHASES.QTY]       - 1 : null;
++      const idxTotalOrig= purchMap[APP.COLS.PURCHASES.TOTAL_ORIG] ? purchMap[APP.COLS.PURCHASES.TOTAL_ORIG] - 1 : null;
++      const idxCurrency = purchMap[APP.COLS.PURCHASES.CURRENCY]  ? purchMap[APP.COLS.PURCHASES.CURRENCY]  - 1 : null;
+ 
+       // Prefer Unit Landed Cost, fallback to Unit Price (EGP)
+       const idxUnitLanded = purchMap[APP.COLS.PURCHASES.UNIT_LANDED] ? purchMap[APP.COLS.PURCHASES.UNIT_LANDED] - 1 : null;
+@@ -1834,12 +1840,31 @@
+ 
+         if (unitCost) {
+           costMap['ORDSKU||' + baseKey] = unitCost;
++
++          // Currency + Unit Price (Orig) (best-effort)
++          const cur = (idxCurrency != null ? String(r[idxCurrency] || '').trim() : '');
++          if (cur) currencyMap['ORDSKU||' + baseKey] = cur;
++
++          const qty = (idxQty != null ? Number(r[idxQty] || 0) : 0);
++          const totOrig = (idxTotalOrig != null ? Number(r[idxTotalOrig] || 0) : 0);
++          if (qty > 0 && totOrig) {
++            unitPriceOrigMap['ORDSKU||' + baseKey] = (totOrig / qty);
++          }
+         }
+ 
+         if (idxBatch != null) {
+           const batch = (r[idxBatch] || '').toString().trim();
+           if (batch && unitCost) {
+             costMap['BATCH||' + batch] = unitCost;
++
++            const curB = (idxCurrency != null ? String(r[idxCurrency] || '').trim() : '');
++            if (curB) currencyMap['BATCH||' + batch] = curB;
++
++            const qtyB = (idxQty != null ? Number(r[idxQty] || 0) : 0);
++            const totOrigB = (idxTotalOrig != null ? Number(r[idxTotalOrig] || 0) : 0);
++            if (qtyB > 0 && totOrigB) {
++              unitPriceOrigMap['BATCH||' + batch] = (totOrigB / qtyB);
++            }
+           }
+         }
+       });
+@@ -1905,7 +1930,13 @@
+ 
+       const product   = row[qcMap['Product Name'] - 1] || '';
+       const variant   = row[qcMap['Variant / Color'] - 1] || '';
+-      const warehouse = (row[qcMap['Warehouse (UAE)'] - 1] || 'UAE-DXB').toString().trim();
++      const qcWhCol = qcMap[APP.COLS.QC_UAE.WAREHOUSE] || qcMap['Warehouse (UAE)'];
++      const warehouseRaw = qcWhCol ? (row[qcWhCol - 1] || '').toString().trim() : '';
++      const warehouse = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(warehouseRaw) : warehouseRaw;
++      if (!warehouse) {
++        logError_('syncQCtoInventory_UAE', new Error('Missing Warehouse (UAE) in QC_UAE'), { qcId: qcId, qcRow: sheetRow });
++        return;
++      }
+ 
+       // Qty In logic:
+       //  - If Qty OK exists → use it
+@@ -1948,7 +1979,8 @@
+         warehouse: warehouse,
+         qty: qtyIn,
+         unitCostEgp: unitCostEgp,
+-        currency: 'EGP',
++        currency: (currencyMap['BATCH||' + batchCode] || currencyMap['ORDSKU||' + (String(orderId) + '||' + String(sku))] || 'EGP'),
++        unitPriceOrig: (unitPriceOrigMap['BATCH||' + batchCode] || unitPriceOrigMap['ORDSKU||' + (String(orderId) + '||' + String(sku))] || ''),
+         txnDate: qcDate || new Date(),
+         notes: 'Imported from QC_UAE (QC ID: ' + qcId + ', row ' + sheetRow + ', Order ' + orderId + ')'
+       });
+@@ -1964,7 +1996,7 @@
+       }
+     }
+ 
+-    inv_rebuildAllSnapshots();
++    if (txns.length) inv_rebuildAllSnapshots();
+     if (typeof safeAlert_ === 'function') {
+       safeAlert_('QC_UAE Sync Done.\n\nNew txns: ' + newTxns + '\nSkipped (already synced): ' + skipped);
+     } else {
+@@ -2004,7 +2036,7 @@
+ 
+       const lastShipRow = shipSh.getLastRow();
+       if (lastShipRow < 2) {
+-        SpreadsheetApp.getUi().alert('No rows in Shipments_UAE_EG to sync.');
++        if (typeof safeAlert_ === 'function') safeAlert_('No rows in Shipments_UAE_EG to sync.');
+         return;
+       }
+ 
+@@ -2019,7 +2051,7 @@
+       const colQtySynced  = shipMap[APP.COLS.SHIP_UAE_EG.QTY_SYNCED]  || shipMap['Qty Synced'];
+ 
+       if (!colShipmentId || !colSku || !colQty || !colShipDate || !colQtySynced) {
+-        SpreadsheetApp.getUi().alert('Missing required headers in Shipments_UAE_EG (Shipment ID / SKU / Qty / Ship Date / Qty Synced).');
++        if (typeof safeAlert_ === 'function') safeAlert_('Missing required headers in Shipments_UAE_EG (Shipment ID / SKU / Qty / Ship Date / Qty Synced).');
+         return;
+       }
+ 
+@@ -2156,7 +2188,10 @@
+           if (invGuess.warehouse) fromWarehouse = invGuess.warehouse;
+         }
+ 
+-        if (!fromWarehouse) fromWarehouse = 'UAE-DXB';
++        if (!fromWarehouse) {
++          logError_('syncShipmentsUaeEgToInventory', new Error('Missing UAE warehouse for OUT movement'), { sku: sku, shipmentId: shipmentId, shipRow: (idx + 2) });
++          return;
++        }
+ 
+         // ===== Inventory info for this SKU+Warehouse =====
+         const keyWh  = sku + '||' + fromWarehouse;
+@@ -2249,7 +2284,7 @@
+       shipSh.getRange(2, 1, shipData.length, shipSh.getLastColumn()).setValues(shipData);
+ 
+       // Rebuild snapshots
+-      inv_rebuildAllSnapshots();
++      if (txns.length) inv_rebuildAllSnapshots();
+ 
+       if (typeof safeAlert_ === 'function') {
+         safeAlert_(

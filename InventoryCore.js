@@ -91,13 +91,13 @@ function setupInventoryLedger_() {
   const ledgerSh = (typeof ensureSheet_ === 'function')
     ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS)
     : ((typeof getOrCreateSheet_ === 'function')
-        ? getOrCreateSheet_(APP.SHEETS.INVENTORY_TXNS)
-        : getSheet_(APP.SHEETS.INVENTORY_TXNS));
+      ? getOrCreateSheet_(APP.SHEETS.INVENTORY_TXNS)
+      : getSheet_(APP.SHEETS.INVENTORY_TXNS));
 
   _setupSheetWithHeaders_(ledgerSh, INV_TXN_HEADERS);
 
   // Self-heal common drift (e.g., legacy "Warehouse (EG)" + extra "Warehouse")
-  try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) {}
+  try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
 
   const map = getHeaderMap_(ledgerSh);
   _applyDateFormat_(ledgerSh, map[APP.COLS.INV_TXNS.TXN_DATE]);
@@ -221,8 +221,8 @@ function setupInventorySnapshotUAE_() {
   const uaeInvSh = (typeof ensureSheet_ === 'function')
     ? ensureSheet_(APP.SHEETS.INVENTORY_UAE)
     : ((typeof getOrCreateSheet_ === 'function')
-        ? getOrCreateSheet_(APP.SHEETS.INVENTORY_UAE)
-        : getSheet_(APP.SHEETS.INVENTORY_UAE));
+      ? getOrCreateSheet_(APP.SHEETS.INVENTORY_UAE)
+      : getSheet_(APP.SHEETS.INVENTORY_UAE));
 
   _setupSheetWithHeaders_(uaeInvSh, INV_UAE_HEADERS);
 
@@ -244,8 +244,8 @@ function setupInventorySnapshotEG_() {
   const egInvSh = (typeof ensureSheet_ === 'function')
     ? ensureSheet_(APP.SHEETS.INVENTORY_EG)
     : ((typeof getOrCreateSheet_ === 'function')
-        ? getOrCreateSheet_(APP.SHEETS.INVENTORY_EG)
-        : getSheet_(APP.SHEETS.INVENTORY_EG));
+      ? getOrCreateSheet_(APP.SHEETS.INVENTORY_EG)
+      : getSheet_(APP.SHEETS.INVENTORY_EG));
 
   _setupSheetWithHeaders_(egInvSh, INV_EG_HEADERS);
 
@@ -375,37 +375,38 @@ function logInventoryTxnBatch_(payloads, opts) {
   const ledgerSh = options.ledgerSheet || ((typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS));
 
   // Ensure ledger schema exists (non-destructive)
-  try { normalizeHeaders_(ledgerSh, 1); } catch (e) {}
+  try { normalizeHeaders_(ledgerSh, 1); } catch (e) { }
   try {
     if (typeof ensureSheetSchema_ === 'function') {
       ensureSheetSchema_(APP.SHEETS.INVENTORY_TXNS, INV_TXN_HEADERS, { addMissing: true, headerRow: 1 });
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const headers = options.headers || INV_TXN_HEADERS;
 
   // Map payload keys by header label (canonical)
   const keyByHeader = {};
-  keyByHeader[APP.COLS.INV_TXNS.TXN_DATE]    = 'txnDate';
-keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
-  keyByHeader[APP.COLS.INV_TXNS.SOURCE_ID]   = 'sourceId';
-  keyByHeader[APP.COLS.INV_TXNS.BATCH_CODE]  = 'batchCode';
-  keyByHeader[APP.COLS.INV_TXNS.SKU]         = 'sku';
-  keyByHeader[APP.COLS.INV_TXNS.PRODUCT_NAME]= 'productName';
-  keyByHeader[APP.COLS.INV_TXNS.VARIANT]     = 'variant';
-  keyByHeader[APP.COLS.INV_TXNS.WAREHOUSE]   = 'warehouse';
-  keyByHeader[APP.COLS.INV_TXNS.QTY_IN]      = 'qtyIn';
-  keyByHeader[APP.COLS.INV_TXNS.QTY_OUT]     = 'qtyOut';
-  keyByHeader[APP.COLS.INV_TXNS.UNIT_COST]      = 'unitCostEgp';
-  keyByHeader[APP.COLS.INV_TXNS.TOTAL_COST]     = 'totalCostEgp';
-  keyByHeader[APP.COLS.INV_TXNS.CURRENCY]      = 'currency';
-  keyByHeader[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG]= 'unitPriceOrig';
-  keyByHeader[APP.COLS.INV_TXNS.NOTES]         = 'notes';
+  keyByHeader[APP.COLS.INV_TXNS.TXN_ID] = 'txnId';
+  keyByHeader[APP.COLS.INV_TXNS.TXN_DATE] = 'txnDate';
+  keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
+  keyByHeader[APP.COLS.INV_TXNS.SOURCE_ID] = 'sourceId';
+  keyByHeader[APP.COLS.INV_TXNS.BATCH_CODE] = 'batchCode';
+  keyByHeader[APP.COLS.INV_TXNS.SKU] = 'sku';
+  keyByHeader[APP.COLS.INV_TXNS.PRODUCT_NAME] = 'productName';
+  keyByHeader[APP.COLS.INV_TXNS.VARIANT] = 'variant';
+  keyByHeader[APP.COLS.INV_TXNS.WAREHOUSE] = 'warehouse';
+  keyByHeader[APP.COLS.INV_TXNS.QTY_IN] = 'qtyIn';
+  keyByHeader[APP.COLS.INV_TXNS.QTY_OUT] = 'qtyOut';
+  keyByHeader[APP.COLS.INV_TXNS.UNIT_COST] = 'unitCostEgp';
+  keyByHeader[APP.COLS.INV_TXNS.TOTAL_COST] = 'totalCostEgp';
+  keyByHeader[APP.COLS.INV_TXNS.CURRENCY] = 'currency';
+  keyByHeader[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG] = 'unitPriceOrig';
+  keyByHeader[APP.COLS.INV_TXNS.NOTES] = 'notes';
 
   // Normalize payload -> ledger row
   function buildRow_(p) {
     const type = String(p.type || '').toUpperCase().trim();
-    const qty  = Number(p.qty || 0);
+    const qty = Number(p.qty || 0);
 
     const txnDate = p.txnDate ? new Date(p.txnDate) : new Date();
     const wh = (typeof normalizeWarehouseCode_ === 'function')
@@ -431,6 +432,9 @@ keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
       notes: p.notes || ''
     };
 
+    // Ensure Txn ID is always populated (unless explicitly provided)
+    out.txnId = p.txnId || _inv_makeTxnId_(out);
+
     if (!out.sku) throw new Error('logInventoryTxnBatch_: missing SKU');
     if (!out.warehouse) throw new Error('logInventoryTxnBatch_: missing warehouse');
     if (!qty || qty <= 0) throw new Error('logInventoryTxnBatch_: invalid qty for SKU ' + out.sku);
@@ -443,6 +447,11 @@ keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
     if (!out.totalCostEgp) {
       const basisQty = (type === 'IN') ? out.qtyIn : out.qtyOut;
       out.totalCostEgp = out.unitCostEgp ? (out.unitCostEgp * basisQty) : 0;
+    }
+
+    // Deterministic Txn ID (used for debugging + optional dedupe)
+    if (!out.txnId) {
+      out.txnId = out.txnId || (typeof _inv_makeTxnId_ === 'function' ? _inv_makeTxnId_(out) : '');
     }
 
     return headers.map(function (h) {
@@ -548,13 +557,13 @@ function _inv_isEgWarehouse_(wh) {
 function rebuildInventoryUAEFromLedger() {
   try {
     const ledgerSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS);
-    const invSh    = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_UAE) : getSheet_(APP.SHEETS.INVENTORY_UAE);
+    const invSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_UAE) : getSheet_(APP.SHEETS.INVENTORY_UAE);
 
     // Self-heal common ledger header drift (Warehouse duplicates)
-    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) {}
+    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
 
     const ledgerMap = getHeaderMap_(ledgerSh);
-    const invMap    = getHeaderMap_(invSh);
+    const invMap = getHeaderMap_(invSh);
 
     const lastRow = ledgerSh.getLastRow();
 
@@ -572,17 +581,17 @@ function rebuildInventoryUAEFromLedger() {
       .getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn())
       .getValues();
 
-    const idxSku       = ledgerMap[APP.COLS.INV_TXNS.SKU]          - 1;
-    const idxWh        = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE]    - 1;
-    const idxProduct   = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
-    const idxVariant   = ledgerMap[APP.COLS.INV_TXNS.VARIANT]      - 1;
-    const idxQtyIn     = ledgerMap[APP.COLS.INV_TXNS.QTY_IN]       - 1;
-    const idxQtyOut    = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT]      - 1;
-    const idxUnitCost  = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST]    - 1;
-    const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST]   - 1;
-    const idxTxnDate   = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE]     - 1;
-    const idxSrcType   = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE]  - 1;
-    const idxSrcId     = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID]    - 1;
+    const idxSku = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
+    const idxWh = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
+    const idxProduct = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
+    const idxVariant = ledgerMap[APP.COLS.INV_TXNS.VARIANT] - 1;
+    const idxQtyIn = ledgerMap[APP.COLS.INV_TXNS.QTY_IN] - 1;
+    const idxQtyOut = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
+    const idxUnitCost = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] - 1;
+    const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] - 1;
+    const idxTxnDate = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] - 1;
+    const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
+    const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
 
     // تجميع حسب (SKU + Warehouse + Variant) لمخازن الإمارات فقط
     const keyMap = {};
@@ -591,21 +600,21 @@ function rebuildInventoryUAEFromLedger() {
       if (!sku) return;
 
       const whRaw = row[idxWh];
-      const wh    = (whRaw || '').toString().trim();
+      const wh = (whRaw || '').toString().trim();
       if (!wh) return;
 
       const whUpper = wh.toUpperCase();
       if (!_inv_isUaeWarehouse_(wh)) { return; }
 
-      const product   = row[idxProduct];
-      const variant   = row[idxVariant];
-      const qtyIn     = Number(row[idxQtyIn]  || 0);
-      const qtyOut    = Number(row[idxQtyOut] || 0);
-      const unitCost  = Number(row[idxUnitCost] || 0);
+      const product = row[idxProduct];
+      const variant = row[idxVariant];
+      const qtyIn = Number(row[idxQtyIn] || 0);
+      const qtyOut = Number(row[idxQtyOut] || 0);
+      const unitCost = Number(row[idxUnitCost] || 0);
       const totalCost = Number(row[idxTotalCost] || 0) || unitCost * qtyIn;
-      const txnDate   = row[idxTxnDate];
-      const srcType   = row[idxSrcType];
-      const srcId     = row[idxSrcId];
+      const txnDate = row[idxTxnDate];
+      const srcType = row[idxSrcType];
+      const srcId = row[idxSrcId];
 
       const key = sku + '||' + wh + '||' + (variant || '');
 
@@ -624,13 +633,13 @@ function rebuildInventoryUAEFromLedger() {
       }
 
       const rec = keyMap[key];
-      rec.onHand    += qtyIn - qtyOut;
+      rec.onHand += qtyIn - qtyOut;
       rec.totalCost += totalCost;
 
       if (txnDate && (!rec.lastDate || txnDate > rec.lastDate)) {
-        rec.lastDate       = txnDate;
+        rec.lastDate = txnDate;
         rec.lastSourceType = srcType || '';
-        rec.lastSourceId   = srcId || '';
+        rec.lastSourceId = srcId || '';
       }
     });
 
@@ -654,18 +663,18 @@ function rebuildInventoryUAEFromLedger() {
       const avgCost = r.onHand ? r.totalCost / r.onHand : 0;
 
       const rowObj = {};
-      rowObj['SKU']              = r.sku;
-      rowObj['Product Name']     = r.product;
-      rowObj['Variant / Color']  = r.variant;
-      rowObj['Warehouse (UAE)']  = r.warehouse;
-      rowObj['On Hand Qty']      = r.onHand;
-      rowObj['Allocated Qty']    = 0;
-      rowObj['Available Qty']    = r.onHand;
-      rowObj['Avg Cost (EGP)']   = avgCost;
+      rowObj['SKU'] = r.sku;
+      rowObj['Product Name'] = r.product;
+      rowObj['Variant / Color'] = r.variant;
+      rowObj['Warehouse (UAE)'] = r.warehouse;
+      rowObj['On Hand Qty'] = r.onHand;
+      rowObj['Allocated Qty'] = 0;
+      rowObj['Available Qty'] = r.onHand;
+      rowObj['Avg Cost (EGP)'] = avgCost;
       rowObj['Total Cost (EGP)'] = r.totalCost;
-      rowObj['Last Txn Date']    = r.lastDate;
+      rowObj['Last Txn Date'] = r.lastDate;
       rowObj['Last Source Type'] = r.lastSourceType;
-      rowObj['Last Source ID']   = r.lastSourceId;
+      rowObj['Last Source ID'] = r.lastSourceId;
 
       const rowArr = invHeaders.map(function (h) {
         return rowObj[h] !== undefined ? rowObj[h] : '';
@@ -690,12 +699,12 @@ function rebuildInventoryUAEFromLedger() {
 function rebuildInventoryEGFromLedger() {
   try {
     const ledgerSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS);
-    const invSh    = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_EG) : getSheet_(APP.SHEETS.INVENTORY_EG);
+    const invSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_EG) : getSheet_(APP.SHEETS.INVENTORY_EG);
 
     // Self-heal common ledger header drift (Warehouse duplicates)
-    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) {}
+    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
     const ledgerMap = getHeaderMap_(ledgerSh);
-    const invMap    = getHeaderMap_(invSh);
+    const invMap = getHeaderMap_(invSh);
 
     const lastRow = ledgerSh.getLastRow();
     if (lastRow < 2) {
@@ -707,17 +716,17 @@ function rebuildInventoryEGFromLedger() {
 
     const data = ledgerSh.getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn()).getValues();
 
-    const idxSku       = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
-    const idxWh        = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
-    const idxProd      = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
-    const idxVar       = ledgerMap[APP.COLS.INV_TXNS.VARIANT] - 1;
-    const idxQtyIn     = ledgerMap[APP.COLS.INV_TXNS.QTY_IN] - 1;
-    const idxQtyOut    = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
-    const idxUnitCost  = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] - 1;
+    const idxSku = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
+    const idxWh = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
+    const idxProd = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
+    const idxVar = ledgerMap[APP.COLS.INV_TXNS.VARIANT] - 1;
+    const idxQtyIn = ledgerMap[APP.COLS.INV_TXNS.QTY_IN] - 1;
+    const idxQtyOut = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
+    const idxUnitCost = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] - 1;
     const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] - 1;
-    const idxTxnDate   = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] - 1;
-    const idxSrcType   = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
-    const idxSrcId     = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
+    const idxTxnDate = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] - 1;
+    const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
+    const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
 
     const keyMap = {};
 
@@ -725,7 +734,7 @@ function rebuildInventoryEGFromLedger() {
       const wh = (row[idxWh] || '').toString().trim().toUpperCase();
       if (!_inv_isEgWarehouse_(wh)) return;
 
-      const qtyIn  = Number(row[idxQtyIn] || 0);
+      const qtyIn = Number(row[idxQtyIn] || 0);
       const qtyOut = Number(row[idxQtyOut] || 0);
       if (qtyIn === 0 && qtyOut === 0) return;
 
@@ -821,13 +830,18 @@ function inv_rebuildAllSnapshots() {
     rebuildInventoryUAEFromLedger();
     rebuildInventoryEGFromLedger();
 
+    // Optional: seed UAE→EG planning rows after snapshots rebuild
+    if (typeof seedShipmentsUaeEgFromInventoryUae === 'function') {
+      seedShipmentsUaeEgFromInventoryUae();
+    }
+
     if (typeof safeAlert_ === 'function') {
       safeAlert_('Inventory snapshots rebuilt (UAE + EG).');
     } else {
       Logger.log('Inventory snapshots rebuilt (UAE + EG).');
     }
   } catch (err) {
-    try { logError_('inv_rebuildAllSnapshots', err); } catch (e) {}
+    try { logError_('inv_rebuildAllSnapshots', err); } catch (e) { }
     throw err;
   }
 }
@@ -894,4 +908,153 @@ function test_manualInventoryTxn() {
     notes: 'Manual test txn'
   });
   inv_rebuildAllSnapshots();
+}
+
+
+
+/** ===================== ONE-TIME REPAIR HELPERS (MANUAL RUN) ===================== */
+
+/**
+ * Backfill missing Txn IDs in Inventory_Transactions.
+ * Safe to re-run; only fills blank Txn ID cells.
+ */
+function inv_backfillMissingTxnIds() {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const sh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
+    const map = getHeaderMap_(sh);
+
+    const colTxnId = map[APP.COLS.INV_TXNS.TXN_ID];
+    const colTxnDate = map[APP.COLS.INV_TXNS.TXN_DATE];
+    const colSrcType = map[APP.COLS.INV_TXNS.SOURCE_TYPE];
+    const colSrcId = map[APP.COLS.INV_TXNS.SOURCE_ID];
+    const colBatch = map[APP.COLS.INV_TXNS.BATCH_CODE];
+    const colSku = map[APP.COLS.INV_TXNS.SKU];
+    const colWh = map[APP.COLS.INV_TXNS.WAREHOUSE];
+    const colQtyIn = map[APP.COLS.INV_TXNS.QTY_IN];
+    const colQtyOut = map[APP.COLS.INV_TXNS.QTY_OUT];
+    const colUnit = map[APP.COLS.INV_TXNS.UNIT_COST];
+    const colCur = map[APP.COLS.INV_TXNS.CURRENCY];
+    const colUPO = map[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG];
+
+    if (!colTxnId || !colTxnDate || !colSku || !colWh || !colQtyIn || !colQtyOut) {
+      throw new Error('inv_backfillMissingTxnIds: missing required ledger columns');
+    }
+
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return 0;
+
+    const values = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues();
+    const outIds = [];
+    let touched = 0;
+
+    values.forEach(function (r) {
+      const existing = r[colTxnId - 1];
+      if (existing && String(existing).trim()) {
+        outIds.push([existing]);
+        return;
+      }
+
+      const qtyIn = Number(r[colQtyIn - 1] || 0);
+      const qtyOut = Number(r[colQtyOut - 1] || 0);
+      const type = qtyIn ? 'IN' : (qtyOut ? 'OUT' : 'IN');
+
+      const o = {
+        type: type,
+        sourceType: colSrcType ? r[colSrcType - 1] : '',
+        sourceId: colSrcId ? r[colSrcId - 1] : '',
+        batchCode: colBatch ? r[colBatch - 1] : '',
+        sku: colSku ? r[colSku - 1] : '',
+        warehouse: colWh ? r[colWh - 1] : '',
+        qtyIn: qtyIn,
+        qtyOut: qtyOut,
+        unitCostEgp: colUnit ? Number(r[colUnit - 1] || 0) : 0,
+        currency: colCur ? r[colCur - 1] : '',
+        unitPriceOrig: colUPO ? Number(r[colUPO - 1] || 0) : 0,
+        txnDate: r[colTxnDate - 1] ? new Date(r[colTxnDate - 1]) : new Date()
+      };
+
+      const id = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_(o) : '';
+      outIds.push([id]);
+      if (id) touched++;
+    });
+
+    if (touched) {
+      sh.getRange(2, colTxnId, outIds.length, 1).setValues(outIds);
+    }
+    return touched;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Repair Warehouse column for QC_UAE ledger rows based on QC_UAE sheet (by QC ID).
+ * This fixes legacy/default 'UAE-DXB' values and aligns ledger with QC.
+ */
+function inv_repairQcUaeLedgerWarehousesFromQcSheet() {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const qcSh = getSheet_(APP.SHEETS.QC_UAE);
+    const lgSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
+
+    const qcMap = getHeaderMap_(qcSh);
+    const lgMap = getHeaderMap_(lgSh);
+
+    const qcColId = qcMap[APP.COLS.QC_UAE.QC_ID];
+    const qcColWh = qcMap[APP.COLS.QC_UAE.WAREHOUSE];
+    if (!qcColId || !qcColWh) throw new Error('inv_repairQcUaeLedgerWarehousesFromQcSheet: missing QC headers');
+    const lgColSrcType = lgMap[APP.COLS.INV_TXNS.SOURCE_TYPE];
+    const lgColSrcId = lgMap[APP.COLS.INV_TXNS.SOURCE_ID];
+    const lgColWh = lgMap[APP.COLS.INV_TXNS.WAREHOUSE];
+    if (!lgColSrcType || !lgColSrcId || !lgColWh) throw new Error('inv_repairQcUaeLedgerWarehousesFromQcSheet: missing ledger headers');
+
+    const qcLast = qcSh.getLastRow();
+    const lgLast = lgSh.getLastRow();
+    if (qcLast < 2 || lgLast < 2) return 0;
+
+    // Build QC_ID -> canonical warehouse
+    const qcData = qcSh.getRange(2, 1, qcLast - 1, qcSh.getLastColumn()).getValues();
+    const qcWhById = {};
+    qcData.forEach(function (r) {
+      const id = (r[qcColId - 1] || '').toString().trim();
+      if (!id) return;
+      const whRaw = (r[qcColWh - 1] || '').toString().trim();
+      const wh = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(whRaw) : whRaw;
+      if (wh) qcWhById[id] = wh;
+    });
+
+    const lgData = lgSh.getRange(2, 1, lgLast - 1, lgSh.getLastColumn()).getValues();
+    const outWh = [];
+    let touched = 0;
+
+    lgData.forEach(function (r) {
+      const srcType = (r[lgColSrcType - 1] || '').toString().trim();
+      if (srcType !== 'QC_UAE') {
+        outWh.push([r[lgColWh - 1]]);
+        return;
+      }
+
+      const qcId = (r[lgColSrcId - 1] || '').toString().trim();
+      const desired = qcWhById[qcId] || '';
+      const currentRaw = (r[lgColWh - 1] || '').toString().trim();
+      const current = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(currentRaw) : currentRaw;
+
+      if (desired && desired !== current) {
+        outWh.push([desired]);
+        touched++;
+      } else {
+        outWh.push([r[lgColWh - 1]]);
+      }
+    });
+
+    if (touched) {
+      lgSh.getRange(2, lgColWh, outWh.length, 1).setValues(outWh);
+    }
+    return touched;
+  } finally {
+    lock.releaseLock();
+  }
 }

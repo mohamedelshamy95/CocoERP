@@ -544,6 +544,15 @@ function normalizeWarehouseCode_(wh) {
   let s = String(wh).trim().toUpperCase();
   s = s.replace(/[_\s]+/g, '-');
   s = s.replace(/-+/g, '-').replace(/^-+|-+$/g, '');
+
+  // Canonicalize legacy aliases (backward compatibility).
+  // Canonical warehouses used by CocoERP v2.1:
+  //  - UAE: KOR, ATTIA
+  //  - EG : TAN-GH
+  if (s === 'UAE' || s === 'UAE-DXB' || s === 'DUBAI') return 'KOR';
+  if (s === 'UAE-KOR') return 'KOR';
+  if (s === 'UAE-ATTIA') return 'ATTIA';
+
   return s;
 }
 
@@ -570,13 +579,49 @@ function isDeliveredStatus_(status) {
   return false;
 }
 
+/* eslint-disable no-restricted-properties */
+function tryGetUi_() {
+  try {
+    return SpreadsheetApp.getUi();
+  } catch (_e) {
+    return null;
+  }
+}
+/* eslint-enable no-restricted-properties */
+
 function safeAlert_(msg, title) {
   try {
-    const ui = SpreadsheetApp.getUi();
-    ui.alert(title || 'CocoERP', String(msg));
+    const ui = tryGetUi_();
+    if (ui) {
+      ui.alert(title ? String(title) : 'CocoERP', String(msg || ''));
+    } else {
+      Logger.log((title ? '[' + title + '] ' : '') + String(msg || ''));
+    }
   } catch (e) {
-    Logger.log((title ? title + ': ' : '') + String(msg));
+    Logger.log('ALERT FAILED: ' + (e && e.message ? e.message : e));
   }
+}
+
+function safeConfirm_(title, msg) {
+  const ui = tryGetUi_();
+  if (!ui) {
+    Logger.log('CONFIRM SKIPPED (no UI): ' + String(title || '') + ' :: ' + String(msg || ''));
+    return false;
+  }
+  const res = ui.alert(String(title || 'Confirm'), String(msg || ''), ui.ButtonSet.YES_NO);
+  return res === ui.Button.YES;
+}
+
+function safePromptText_(title, msg, defaultValue) {
+  const ui = tryGetUi_();
+  if (!ui) {
+    Logger.log('PROMPT SKIPPED (no UI): ' + String(title || '') + ' :: ' + String(msg || ''));
+    return null;
+  }
+  const res = ui.prompt(String(title || 'Input'), String(msg || ''), ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return null;
+  const t = res.getResponseText();
+  return t != null && String(t).trim() !== '' ? String(t) : (defaultValue != null ? String(defaultValue) : '');
 }
 
 
@@ -585,13 +630,12 @@ function safeAlert_(msg, title) {
  * - In manual UI context: shows OK/CANCEL and returns true/false.
  * - In trigger/automation context: returns false.
  */
-function safeConfirm_(title, message) {
+function safeConfirmYesNo_(title, message) {
   try {
     const ui = SpreadsheetApp.getUi();
-    const resp = ui.alert(String(title || 'Confirm'), String(message || ''), ui.ButtonSet.OK_CANCEL);
-    return resp === ui.Button.OK;
+    const resp = ui.alert(String(title || 'Confirm'), String(message || ''), ui.ButtonSet.YES_NO);
+    return resp === ui.Button.YES;
   } catch (e) {
-    // No UI available (e.g., installable triggers). Fail safe.
     return false;
   }
 }
@@ -939,6 +983,7 @@ function onOpen(e) {
         .addItem('Install Purchases Formulas', 'installPurchasesFormulas')
         .addSeparator()
         .addItem('Setup Orders Layout', 'setupOrdersLayout')
+        .addItem('Setup Orders Layout (HARD RESET)', 'setupOrdersLayoutHardReset')
         .addItem('Rebuild Orders Summary', 'rebuildOrdersSummary')
         .addItem('Process Sync Queue Now', 'coco_processSyncQueueNow')
         .addItem('Debug Orders Sync Status', 'coco_debugOrdersSyncStatus')
@@ -1054,11 +1099,23 @@ function _dispatchOnEdit_(e) {
     return;
   }
 
-  if (name === APP.SHEETS.SHIP_UAE_EG && typeof shipmentsUaeEgOnEdit_ === 'function') {
-    shipmentsUaeEgOnEdit_(e);
-    try { coco_flagShipUaeEgInventorySyncFromEdit_(e); } catch (err) { logError_('coco_flagShipUaeEgInventorySyncFromEdit_', err); }
+  if (name === APP.SHEETS.SHIP_UAE_EG) {
+    try {
+      if (typeof shipmentsUaeEgOnEdit_ === 'function') shipmentsUaeEgOnEdit_(e);
+    } catch (err) {
+      logError_('shipmentsUaeEgOnEdit_', err, { sheet: name, a1: e.range.getA1Notation() });
+    }
+
+    // ✅ This is the missing piece: enqueue/flag inventory sync
+    try {
+      coco_flagShipUaeEgInventorySyncFromEdit_(e);
+    } catch (err) {
+      logError_('coco_flagShipUaeEgInventorySyncFromEdit_', err, { sheet: name, a1: e.range.getA1Notation() });
+    }
+
     return;
   }
+
 
   if (name === APP.SHEETS.SALES_EG && typeof salesEgOnEdit_ === 'function') {
     salesEgOnEdit_(e);
@@ -1532,6 +1589,38 @@ function coco_flagShipUaeEgInventorySyncFromEdit_(e) {
   }
 }
 
+function coco_hasPendingShipUaeEgInventorySync_() {
+  const sh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+  const map = getHeaderMap_(sh);
+
+  const cShipId = map[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID] || map['Shipment ID'];
+  const cSku = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
+  const cQty = map[APP.COLS.SHIP_UAE_EG.QTY] || map['Qty'];
+  const cSynced = map[APP.COLS.SHIP_UAE_EG.QTY_SYNCED] || map['Qty Synced'];
+
+  if (!cShipId || !cSku || !cQty) return false;
+
+  const lr = sh.getLastRow();
+  if (lr < 2) return false;
+
+  const vals = sh.getRange(2, 1, lr - 1, sh.getLastColumn()).getValues();
+
+  const iShipId = cShipId - 1;
+  const iSku = cSku - 1;
+  const iQty = cQty - 1;
+  const iSynced = cSynced ? (cSynced - 1) : -1;
+
+  for (const r of vals) {
+    const sid = String(r[iShipId] || '').trim();
+    const sku = String(r[iSku] || '').trim();
+    const qty = Number(r[iQty] || 0);
+    const synced = iSynced >= 0 ? Number(r[iSynced] || 0) : 0;
+
+    if (sid && sku && qty > synced) return true;
+  }
+  return false;
+}
+
 function coco_processSyncQueue() {
   return withLock_('coco_processSyncQueue', function () {
     const dp = PropertiesService.getDocumentProperties();
@@ -1546,7 +1635,23 @@ function coco_processSyncQueue() {
 
     const qcInvFlag0 = String(dp.getProperty(APP.INTERNAL.QC_INV_SYNC_FLAG) || '');
     const shipUaeEgInvFlag0 = String(dp.getProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG) || '');
-    if (!ordersForceAll && !ordersRaw && !qcForceAll && !qcRaw && shipFlag !== '1' && qcInvFlag0 !== '1' && shipUaeEgInvFlag0 !== '1') return;
+
+    // Auto-detect pending Shipments_UAE_EG deltas (Qty > Qty Synced) so queue works even without onEdit.
+    let shipUaeEgInvFlag = shipUaeEgInvFlag0;
+    if (shipUaeEgInvFlag !== '1') {
+      try {
+        if (coco_hasPendingShipUaeEgInventorySync_()) {
+          dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1');
+          shipUaeEgInvFlag = '1';
+        }
+      } catch (e) {
+        logError_('coco_processSyncQueue:autoDetectShipUaeEg', e);
+      }
+    }
+
+    // Early exit if nothing to do
+    if (!ordersForceAll && !ordersRaw && !qcForceAll && !qcRaw && shipFlag !== '1' && qcInvFlag0 !== '1' && shipUaeEgInvFlag !== '1') return;
+
     const snapshot = {
       ordersForceAll: ordersForceAll ? '1' : '',
       ordersRaw: ordersRaw || '',

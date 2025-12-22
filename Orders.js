@@ -88,19 +88,8 @@ function setupOrdersLayoutHardReset() {
     ensureErrorLog_();
 
     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
-    const ui = orders_tryGetUi_();
-    if (!ui) throw new Error('This action requires UI (run from spreadsheet menu).');
-    let res = null;
-
-    if (ui) {
-      res = ui.alert('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', ui.ButtonSet.YES_NO);
-    } else {
-      Logger.log('WARN: UI not available; clear Orders confirmation skipped.');
-    }
-
-    const confirmed = !!ui && res === ui.Button.YES;
-    if (!confirmed) return;
-
+    // Manual confirmation only (safe in triggers/editor: returns false)
+    if (!safeConfirm_('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟')) return;
 
     orders_removeFilterIfAny_(shO);
     shO.clear();
@@ -110,7 +99,7 @@ function setupOrdersLayoutHardReset() {
     shO.getRange(1, 1, 1, ORDER_HEADERS.length).setValues([ORDER_HEADERS]);
 
     orders_applyHeaderStyle_(shO, ORDER_HEADERS);
-    orders_alert_('✅ Orders HARD RESET done.');
+    safeAlert_('✅ Orders HARD RESET done.');
   } catch (e) {
     logError_('setupOrdersLayoutHardReset', e);
     throw e;

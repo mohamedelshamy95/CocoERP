@@ -1,0 +1,450 @@
+--- a/AppCore.js
++++ b/AppCore.js
+@@ -518,8 +518,19 @@
+   let s = String(wh).trim().toUpperCase();
+   s = s.replace(/[_\s]+/g, '-');
+   s = s.replace(/-+/g, '-').replace(/^-+|-+$/g, '');
++
++  // Canonicalize legacy aliases (backward compatibility).
++  // Canonical warehouses used by CocoERP v2.1:
++  //  - UAE: KOR, ATTIA
++  //  - EG : TAN-GH
++  if (s === 'UAE' || s === 'UAE-DXB' || s === 'DUBAI') return 'KOR';
++  if (s === 'UAE-KOR') return 'KOR';
++  if (s === 'UAE-ATTIA') return 'ATTIA';
++  if (s === 'TAN - GH' || s === 'TAN-GH' || s === 'TANTA') return 'TAN-GH';
++
+   return s;
+ }
++
+ 
+ /**
+  * Delivered status detector (Arabic + English).
+--- a/InventoryCore.js
++++ b/InventoryCore.js
+@@ -386,6 +386,7 @@
+ 
+   // Map payload keys by header label (canonical)
+   const keyByHeader = {};
++  keyByHeader[APP.COLS.INV_TXNS.TXN_ID]      = 'txnId';
+   keyByHeader[APP.COLS.INV_TXNS.TXN_DATE]    = 'txnDate';
+ keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
+   keyByHeader[APP.COLS.INV_TXNS.SOURCE_ID]   = 'sourceId';
+@@ -414,6 +415,7 @@
+ 
+     const out = {
+       txnDate: txnDate,
++      txnId: String(p.txnId || '').trim(),
+       type: type,
+       sourceType: String(p.sourceType || '').trim(),
+       sourceId: String(p.sourceId || '').trim(),
+@@ -443,6 +445,11 @@
+     if (!out.totalCostEgp) {
+       const basisQty = (type === 'IN') ? out.qtyIn : out.qtyOut;
+       out.totalCostEgp = out.unitCostEgp ? (out.unitCostEgp * basisQty) : 0;
++    }
++
++    // Deterministic Txn ID (useful for debugging + optional dedupe)
++    if (!out.txnId) {
++      if (typeof _inv_makeTxnId_ === 'function') out.txnId = _inv_makeTxnId_(out);
+     }
+ 
+     return headers.map(function (h) {
+@@ -895,3 +902,281 @@
+   });
+   inv_rebuildAllSnapshots();
+ }
++
++
++/** ===================== ONE-TIME REPAIR HELPERS (MANUAL RUN) ===================== */
++
++/**
++ * Backfill missing Txn IDs in Inventory_Transactions.
++ * Safe to re-run; only fills blank Txn ID cells.
++ *
++ * @return {number} number of rows updated
++ */
++function inv_backfillMissingTxnIds() {
++  const lock = LockService.getDocumentLock();
++  lock.waitLock(30000);
++  try {
++    const sh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
++    const map = getHeaderMap_(sh);
++
++    const colTxnId   = map[APP.COLS.INV_TXNS.TXN_ID];
++    const colTxnDate = map[APP.COLS.INV_TXNS.TXN_DATE];
++    const colSrcType = map[APP.COLS.INV_TXNS.SOURCE_TYPE];
++    const colSrcId   = map[APP.COLS.INV_TXNS.SOURCE_ID];
++    const colBatch   = map[APP.COLS.INV_TXNS.BATCH_CODE];
++    const colSku     = map[APP.COLS.INV_TXNS.SKU];
++    const colWh      = map[APP.COLS.INV_TXNS.WAREHOUSE];
++    const colQtyIn   = map[APP.COLS.INV_TXNS.QTY_IN];
++    const colQtyOut  = map[APP.COLS.INV_TXNS.QTY_OUT];
++    const colUnit    = map[APP.COLS.INV_TXNS.UNIT_COST];
++    const colCur     = map[APP.COLS.INV_TXNS.CURRENCY];
++    const colUpo     = map[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG];
++
++    if (!colTxnId || !colTxnDate || !colSku || !colWh || !colQtyIn || !colQtyOut) {
++      throw new Error('inv_backfillMissingTxnIds: missing required ledger columns');
++    }
++
++    const lastRow = sh.getLastRow();
++    if (lastRow < 2) return 0;
++
++    const values = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues();
++    const outIds = [];
++    let touched = 0;
++
++    values.forEach(function (r) {
++      const existing = r[colTxnId - 1];
++      if (existing && String(existing).trim()) {
++        outIds.push([existing]);
++        return;
++      }
++
++      const qtyIn  = Number(r[colQtyIn - 1] || 0);
++      const qtyOut = Number(r[colQtyOut - 1] || 0);
++      const type   = qtyIn ? 'IN' : (qtyOut ? 'OUT' : 'IN');
++
++      const o = {
++        type: type,
++        sourceType: colSrcType ? r[colSrcType - 1] : '',
++        sourceId:   colSrcId   ? r[colSrcId   - 1] : '',
++        batchCode:  colBatch   ? r[colBatch   - 1] : '',
++        sku:        colSku     ? r[colSku     - 1] : '',
++        warehouse:  colWh      ? r[colWh      - 1] : '',
++        qtyIn: qtyIn,
++        qtyOut: qtyOut,
++        unitCostEgp: colUnit ? Number(r[colUnit - 1] || 0) : 0,
++        currency: colCur ? r[colCur - 1] : '',
++        unitPriceOrig: colUpo ? Number(r[colUpo - 1] || 0) : 0,
++        txnDate: r[colTxnDate - 1] ? new Date(r[colTxnDate - 1]) : new Date()
++      };
++
++      const id = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_(o) : '';
++      outIds.push([id]);
++      if (id) touched++;
++    });
++
++    if (touched) {
++      sh.getRange(2, colTxnId, outIds.length, 1).setValues(outIds);
++    }
++    return touched;
++  } finally {
++    lock.releaseLock();
++  }
++}
++
++/**
++ * Fix QC_UAE ledger warehouses using QC_UAE sheet value (by QC ID).
++ * This repairs legacy/default 'UAE-DXB' values and aligns ledger with QC.
++ *
++ * @return {number} number of rows updated
++ */
++function inv_repairQcUaeLedgerWarehousesFromQcSheet() {
++  const lock = LockService.getDocumentLock();
++  lock.waitLock(30000);
++  try {
++    const qcSh = getSheet_(APP.SHEETS.QC_UAE);
++    const lgSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
++
++    const qcMap = getHeaderMap_(qcSh);
++    const lgMap = getHeaderMap_(lgSh);
++
++    const qcColId = qcMap[APP.COLS.QC_UAE.QC_ID];
++    const qcColWh = qcMap[APP.COLS.QC_UAE.WAREHOUSE];
++    if (!qcColId || !qcColWh) throw new Error('inv_repairQcUaeLedgerWarehousesFromQcSheet: missing QC headers');
++
++    const lgColSrcType = lgMap[APP.COLS.INV_TXNS.SOURCE_TYPE];
++    const lgColSrcId   = lgMap[APP.COLS.INV_TXNS.SOURCE_ID];
++    const lgColWh      = lgMap[APP.COLS.INV_TXNS.WAREHOUSE];
++    if (!lgColSrcType || !lgColSrcId || !lgColWh) throw new Error('inv_repairQcUaeLedgerWarehousesFromQcSheet: missing ledger headers');
++
++    const qcLast = qcSh.getLastRow();
++    const lgLast = lgSh.getLastRow();
++    if (qcLast < 2 || lgLast < 2) return 0;
++
++    const qcData = qcSh.getRange(2, 1, qcLast - 1, qcSh.getLastColumn()).getValues();
++    const qcWhById = {};
++    qcData.forEach(function (r) {
++      const id = (r[qcColId - 1] || '').toString().trim();
++      if (!id) return;
++      const whRaw = (r[qcColWh - 1] || '').toString().trim();
++      const wh = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(whRaw) : whRaw;
++      if (wh) qcWhById[id] = wh;
++    });
++
++    const lgData = lgSh.getRange(2, 1, lgLast - 1, lgSh.getLastColumn()).getValues();
++    const outWh = [];
++    let touched = 0;
++
++    lgData.forEach(function (r) {
++      const srcType = (r[lgColSrcType - 1] || '').toString().trim();
++      if (srcType !== 'QC_UAE') {
++        outWh.push([r[lgColWh - 1]]);
++        return;
++      }
++
++      const qcId = (r[lgColSrcId - 1] || '').toString().trim();
++      const desired = qcWhById[qcId] || '';
++      const currentRaw = (r[lgColWh - 1] || '').toString().trim();
++      const current = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(currentRaw) : currentRaw;
++
++      if (desired && desired !== current) {
++        outWh.push([desired]);
++        touched++;
++      } else {
++        outWh.push([r[lgColWh - 1]]);
++      }
++    });
++
++    if (touched) {
++      lgSh.getRange(2, lgColWh, outWh.length, 1).setValues(outWh);
++    }
++    return touched;
++  } finally {
++    lock.releaseLock();
++  }
++}
++
++
++/**
++ * Backfill Unit Price (Orig) + Currency in Inventory_Transactions for QC_UAE rows,
++ * using QC_UAE (QC ID → Order ID + SKU) and Purchases (Order ID + SKU → Currency + Total/Qty).
++ *
++ * Safe to re-run; only fills blank fields.
++ *
++ * @return {number} number of rows updated
++ */
++function inv_backfillQcUaeOrigPriceAndCurrencyFromPurchases() {
++  const lock = LockService.getDocumentLock();
++  lock.waitLock(30000);
++  try {
++    const qcSh = getSheet_(APP.SHEETS.QC_UAE);
++    const pSh  = getSheet_(APP.SHEETS.PURCHASES);
++    const lgSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
++
++    const qcMap = getHeaderMap_(qcSh);
++    const pMap  = getHeaderMap_(pSh);
++    const lgMap = getHeaderMap_(lgSh);
++
++    const qcColId    = qcMap[APP.COLS.QC_UAE.QC_ID];
++    const qcColOrder = qcMap[APP.COLS.QC_UAE.ORDER_ID];
++    const qcColSku   = qcMap[APP.COLS.QC_UAE.SKU];
++    if (!qcColId || !qcColOrder || !qcColSku) {
++      throw new Error('inv_backfillQcUaeOrigPriceAndCurrencyFromPurchases: missing QC_UAE headers');
++    }
++
++    const pColOrder = pMap[APP.COLS.PURCHASES.ORDER_ID];
++    const pColSku   = pMap[APP.COLS.PURCHASES.SKU];
++    const pColQty   = pMap[APP.COLS.PURCHASES.QTY];
++    const pColTot   = pMap[APP.COLS.PURCHASES.TOTAL_ORIG];
++    const pColCur   = pMap[APP.COLS.PURCHASES.CURRENCY];
++    if (!pColOrder || !pColSku || !pColQty || !pColTot) {
++      throw new Error('inv_backfillQcUaeOrigPriceAndCurrencyFromPurchases: missing Purchases headers');
++    }
++
++    const lgColSrcType = lgMap[APP.COLS.INV_TXNS.SOURCE_TYPE];
++    const lgColSrcId   = lgMap[APP.COLS.INV_TXNS.SOURCE_ID];
++    const lgColCur     = lgMap[APP.COLS.INV_TXNS.CURRENCY];
++    const lgColUpo     = lgMap[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG];
++
++    if (!lgColSrcType || !lgColSrcId || !lgColCur || !lgColUpo) {
++      throw new Error('inv_backfillQcUaeOrigPriceAndCurrencyFromPurchases: missing Inventory_Transactions headers');
++    }
++
++    const qcLast = qcSh.getLastRow();
++    const pLast  = pSh.getLastRow();
++    const lgLast = lgSh.getLastRow();
++    if (qcLast < 2 || pLast < 2 || lgLast < 2) return 0;
++
++    // QC ID → {orderId, sku}
++    const qcData = qcSh.getRange(2, 1, qcLast - 1, qcSh.getLastColumn()).getValues();
++    const qcById = {};
++    qcData.forEach(function (r) {
++      const id = (r[qcColId - 1] || '').toString().trim();
++      if (!id) return;
++      const orderId = r[qcColOrder - 1];
++      const sku = (r[qcColSku - 1] || '').toString().trim();
++      if (!orderId || !sku) return;
++      qcById[id] = { orderId: orderId, sku: sku };
++    });
++
++    // Purchases: Order||SKU → {cur, unitPriceOrig}
++    const pData = pSh.getRange(2, 1, pLast - 1, pSh.getLastColumn()).getValues();
++    const pByOrderSku = {};
++    pData.forEach(function (r) {
++      const orderId = r[pColOrder - 1];
++      const sku = (r[pColSku - 1] || '').toString().trim();
++      if (!orderId || !sku) return;
++
++      const qty = Number(r[pColQty - 1] || 0);
++      const tot = Number(r[pColTot - 1] || 0);
++      const unit = qty ? (tot / qty) : 0;
++      const cur = pColCur ? (r[pColCur - 1] || '').toString().trim() : '';
++
++      pByOrderSku[String(orderId) + '||' + sku] = { cur: cur, unit: unit };
++    });
++
++    // Ledger update
++    const lgData = lgSh.getRange(2, 1, lgLast - 1, lgSh.getLastColumn()).getValues();
++    const outCur = [];
++    const outUpo = [];
++    let touched = 0;
++
++    lgData.forEach(function (r) {
++      const srcType = (r[lgColSrcType - 1] || '').toString().trim();
++      if (srcType !== 'QC_UAE') {
++        outCur.push([r[lgColCur - 1]]);
++        outUpo.push([r[lgColUpo - 1]]);
++        return;
++      }
++
++      const srcId = (r[lgColSrcId - 1] || '').toString().trim();
++      const qc = qcById[srcId];
++      if (!qc) {
++        outCur.push([r[lgColCur - 1]]);
++        outUpo.push([r[lgColUpo - 1]]);
++        return;
++      }
++
++      const key = String(qc.orderId) + '||' + qc.sku;
++      const p = pByOrderSku[key] || {};
++
++      const curExisting = (r[lgColCur - 1] || '').toString().trim();
++      const upoExisting = r[lgColUpo - 1];
++
++      const newCur = curExisting || (p.cur || '');
++      const newUpo = (upoExisting === '' || upoExisting == null) ? (p.unit || '') : upoExisting;
++
++      if (newCur !== curExisting || newUpo !== upoExisting) touched++;
++
++      outCur.push([newCur]);
++      outUpo.push([newUpo]);
++    });
++
++    if (touched) {
++      lgSh.getRange(2, lgColCur, outCur.length, 1).setValues(outCur);
++      lgSh.getRange(2, lgColUpo, outUpo.length, 1).setValues(outUpo);
++    }
++    return touched;
++  } finally {
++    lock.releaseLock();
++  }
++}
+--- a/ShipmentsCore.js
++++ b/ShipmentsCore.js
+@@ -1809,6 +1809,8 @@
+     // ===== Build cost map from Purchases =====
+     const purchLast = purchSh.getLastRow();
+     const costMap = {};
++    const currencyMap = {};
++    const unitPriceOrigMap = {};
+ 
+     if (purchLast >= 2) {
+       const purchData = purchSh.getRange(2, 1, purchLast - 1, purchSh.getLastColumn()).getValues();
+@@ -1816,10 +1818,17 @@
+       const idxOrder = purchMap[APP.COLS.PURCHASES.ORDER_ID] ? purchMap[APP.COLS.PURCHASES.ORDER_ID] - 1 : null;
+       const idxSku   = purchMap[APP.COLS.PURCHASES.SKU]      ? purchMap[APP.COLS.PURCHASES.SKU]      - 1 : null;
+       const idxBatch = purchMap[APP.COLS.PURCHASES.BATCH_CODE] ? purchMap[APP.COLS.PURCHASES.BATCH_CODE] - 1 : null;
++      const idxQty   = purchMap[APP.COLS.PURCHASES.QTY] ? purchMap[APP.COLS.PURCHASES.QTY] - 1 : null;
++      const idxTotalOrig = purchMap[APP.COLS.PURCHASES.TOTAL_ORIG] ? purchMap[APP.COLS.PURCHASES.TOTAL_ORIG] - 1 : null;
++      const idxCurrency  = purchMap[APP.COLS.PURCHASES.CURRENCY] ? purchMap[APP.COLS.PURCHASES.CURRENCY] - 1 : null;
++
++      const parseNum_ = function (v) {
++        const n = Number(v);
++        return isFinite(n) ? n : 0;
++      };
+ 
+       // Prefer Unit Landed Cost, fallback to Unit Price (EGP)
+       const idxUnitLanded = purchMap[APP.COLS.PURCHASES.UNIT_LANDED] ? purchMap[APP.COLS.PURCHASES.UNIT_LANDED] - 1 : null;
+-      const idxUnitNet    = purchMap[APP.COLS.PURCHASES.NET_UNIT_PRICE] ? purchMap[APP.COLS.PURCHASES.NET_UNIT_PRICE] - 1 : null;
+ 
+       purchData.forEach(function (r) {
+         if (idxOrder == null || idxSku == null) return;
+@@ -1828,18 +1837,32 @@
+         if (!orderId || !sku) return;
+ 
+         const baseKey = String(orderId) + '||' + String(sku);
+-        const unitCost = idxUnitLanded != null
+-          ? Number(r[idxUnitLanded] || 0)
+-          : (idxUnitNet != null ? Number(r[idxUnitNet] || 0) : 0);
++        const unitCost = (idxUnitLanded != null) ? Number(r[idxUnitLanded] || 0) : 0;
+ 
+         if (unitCost) {
+           costMap['ORDSKU||' + baseKey] = unitCost;
++
++          const cur = (idxCurrency != null) ? (r[idxCurrency] || '').toString().trim() : '';
++          if (cur) currencyMap['ORDSKU||' + baseKey] = cur;
++
++          if (idxTotalOrig != null && idxQty != null) {
++            const tot = parseNum_(r[idxTotalOrig]);
++            const q   = parseNum_(r[idxQty]);
++            if (q) unitPriceOrigMap['ORDSKU||' + baseKey] = tot / q;
++          }
+         }
+ 
+         if (idxBatch != null) {
+           const batch = (r[idxBatch] || '').toString().trim();
+           if (batch && unitCost) {
+             costMap['BATCH||' + batch] = unitCost;
++            const curB = (idxCurrency != null) ? (r[idxCurrency] || '').toString().trim() : '';
++            if (curB) currencyMap['BATCH||' + batch] = curB;
++            if (idxTotalOrig != null && idxQty != null) {
++              const totB = parseNum_(r[idxTotalOrig]);
++              const qB   = parseNum_(r[idxQty]);
++              if (qB) unitPriceOrigMap['BATCH||' + batch] = totB / qB;
++            }
+           }
+         }
+       });
+@@ -1905,7 +1928,12 @@
+ 
+       const product   = row[qcMap['Product Name'] - 1] || '';
+       const variant   = row[qcMap['Variant / Color'] - 1] || '';
+-      const warehouse = (row[qcMap['Warehouse (UAE)'] - 1] || 'UAE-DXB').toString().trim();
++      const whRaw = (row[qcMap[APP.COLS.QC_UAE.WAREHOUSE] - 1] || '').toString().trim();
++      const warehouse = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(whRaw) : whRaw;
++      if (!warehouse) {
++        logError_('syncQCtoInventory_UAE', new Error('Missing Warehouse (UAE) in QC_UAE'), { qcId: qcId, qcRow: sheetRow });
++        return;
++      }
+ 
+       // Qty In logic:
+       //  - If Qty OK exists → use it
+@@ -1948,7 +1976,8 @@
+         warehouse: warehouse,
+         qty: qtyIn,
+         unitCostEgp: unitCostEgp,
+-        currency: 'EGP',
++        currency: (currencyMap['BATCH||' + batchCode] || currencyMap['ORDSKU||' + baseKey] || ''),
++        unitPriceOrig: (unitPriceOrigMap['BATCH||' + batchCode] || unitPriceOrigMap['ORDSKU||' + baseKey] || ''),
+         txnDate: qcDate || new Date(),
+         notes: 'Imported from QC_UAE (QC ID: ' + qcId + ', row ' + sheetRow + ', Order ' + orderId + ')'
+       });
+@@ -2082,7 +2111,8 @@
+         const skuVal = r[idxUaeSku];
+         if (!skuVal) return;
+ 
+-        const wh  = idxUaeWh != null ? (r[idxUaeWh] || '').toString().trim() : '';
++        const whRaw  = idxUaeWh != null ? (r[idxUaeWh] || '').toString().trim() : '';
++        const wh  = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(whRaw) : whRaw;
+         const key = skuVal + '||' + wh;
+ 
+         const info = {
+@@ -2156,7 +2186,14 @@
+           if (invGuess.warehouse) fromWarehouse = invGuess.warehouse;
+         }
+ 
+-        if (!fromWarehouse) fromWarehouse = 'UAE-DXB';
++        if (typeof normalizeWarehouseCode_ === 'function') {
++          fromWarehouse = normalizeWarehouseCode_(fromWarehouse);
++        }
++
++        if (!fromWarehouse) {
++          logError_('syncShipmentsUaeEgToInventory', new Error('Cannot determine UAE warehouse for OUT'), { sku: sku, shipmentId: shipmentId, shipRow: (idx + 2) });
++          return;
++        }
+ 
+         // ===== Inventory info for this SKU+Warehouse =====
+         const keyWh  = sku + '||' + fromWarehouse;
