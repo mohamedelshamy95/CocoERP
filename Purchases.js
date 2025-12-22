@@ -355,13 +355,8 @@ function setupPurchasesLayoutHardReset() {
     const sh = ensureSheet_(APP.SHEETS.PURCHASES);
     const setSh = ensureSheet_(APP.SHEETS.SETTINGS);
 
-    const ui = null; // UI is centralized via safe* helpers in AppCore
-    const res = safeAlert_(
-      'تحذير',
-      'ده هيمسح Purchases و Settings بالكامل. متأكد؟',
-      ui.ButtonSet.YES_NO
-    );
-    if (res !== ui.Button.YES) return;
+    // Confirm (manual UI only). In triggers/automation this returns false safely.
+    if (!safeConfirm_('تحذير', 'ده هيمسح Purchases و Settings بالكامل. متأكد؟')) return;
 
     // Reset Settings
     setSh.clear();
