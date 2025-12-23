@@ -100,6 +100,7 @@ const APP = {
       TOTAL_EGP: 'Order Total (EGP)',
       LANDED_COST: 'Landed Cost (EGP)',
       UNIT_LANDED: 'Unit Landed Cost (EGP)',
+      NET_UNIT_PRICE: 'Net Unit Price (EGP)',
       CURRENCY: 'Currency',
       BUYER_NAME: 'Buyer Name',
       SHIP_EG: 'Ship UAE→EG (EGP)',
@@ -150,6 +151,7 @@ const APP = {
       ETA: 'ETA',
       ARRIVAL: 'Actual Arrival',
       STATUS: 'Status',
+      WAREHOUSE_UAE: 'Warehouse (UAE)',
       SKU: 'SKU',
       PRODUCT_NAME: 'Product Name',
       VARIANT: 'Variant / Color',
@@ -464,6 +466,38 @@ function normalizeHeaders_(sh, headerRow) {
   if (changed) range.setValues([headers]);
 }
 
+
+function repairBlankHeadersByPosition_(sheetName, expectedHeaders, headerRow) {
+  const row = headerRow || 1;
+  if (!sheetName || !expectedHeaders || !expectedHeaders.length) return;
+
+  const sh = ensureSheet_(sheetName);
+  const lastCol = sh.getLastColumn();
+  if (lastCol <= 0) return;
+
+  const current = sh.getRange(row, 1, 1, lastCol).getValues()[0];
+  const max = Math.min(current.length, expectedHeaders.length);
+
+  let changed = false;
+  for (let i = 0; i < max; i++) {
+    const cur = String(current[i] || '').trim();
+    if (cur) continue;
+
+    const expected = expectedHeaders[i];
+    if (!expected) continue;
+
+    const exp = String(expected).trim();
+    if (!exp) continue;
+
+    current[i] = exp;
+    changed = true;
+  }
+
+  if (changed) {
+    sh.getRange(row, 1, 1, current.length).setValues([current]);
+  }
+}
+
 /** ===================== ERROR LOGGING ===================== */
 
 function ensureErrorLog_() {
@@ -621,7 +655,7 @@ function safePromptText_(title, msg, defaultValue) {
   const res = ui.prompt(String(title || 'Input'), String(msg || ''), ui.ButtonSet.OK_CANCEL);
   if (res.getSelectedButton() !== ui.Button.OK) return null;
   const t = res.getResponseText();
-  return t != null && String(t).trim() !== '' ? String(t) : (defaultValue != null ? String(defaultValue) : '');
+  return t != null && String(t).trim() !== '' ? String(t).trim() : (defaultValue != null ? String(defaultValue) : '');
 }
 
 
@@ -631,13 +665,8 @@ function safePromptText_(title, msg, defaultValue) {
  * - In trigger/automation context: returns false.
  */
 function safeConfirmYesNo_(title, message) {
-  try {
-    const ui = SpreadsheetApp.getUi();
-    const resp = ui.alert(String(title || 'Confirm'), String(message || ''), ui.ButtonSet.YES_NO);
-    return resp === ui.Button.YES;
-  } catch (e) {
-    return false;
-  }
+  // Wrapper kept for backward compatibility.
+  return safeConfirm_(title, message);
 }
 
 /**
@@ -645,18 +674,6 @@ function safeConfirmYesNo_(title, message) {
  * - In manual UI context: returns trimmed text (may be empty string).
  * - If user cancels OR UI unavailable: returns null.
  */
-function safePromptText_(title, message) {
-  try {
-    const ui = SpreadsheetApp.getUi();
-    const resp = ui.prompt(String(title || 'Input'), String(message || ''), ui.ButtonSet.OK_CANCEL);
-    if (resp.getSelectedButton() !== ui.Button.OK) return null;
-    const t = resp.getResponseText();
-    return (t == null) ? '' : String(t).trim();
-  } catch (e) {
-    // No UI available (e.g., installable triggers).
-    return null;
-  }
-}
 
 /** ===================== SETTINGS LAYER ===================== */
 
@@ -899,6 +916,19 @@ function coco_preflightAndRepair() {
         const sh = ensureSheet_(shName);
         if (shName !== APP.SHEETS.SETTINGS) normalizeHeaders_(sh, 1);
       });
+
+
+      // Repair known blank header issues by expected positions (non-destructive)
+      try {
+        if (typeof SHIP_UAE_EG_HEADERS !== 'undefined') {
+          repairBlankHeadersByPosition_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, 1);
+        }
+        if (typeof SHIP_CN_UAE_HEADERS !== 'undefined') {
+          repairBlankHeadersByPosition_(APP.SHEETS.SHIP_CN_UAE, SHIP_CN_UAE_HEADERS, 1);
+        }
+      } catch (e) {
+        logError_('coco_preflightAndRepair.repairBlankHeaders', e);
+      }
 
       // Ensure schemas we strongly expect (post-bootstrap)
       ensureSheetSchema_(APP.SHEETS.INVENTORY_TXNS, Object.keys(APP.COLS.INV_TXNS).map(function (k) { return APP.COLS.INV_TXNS[k]; }), { addMissing: true });

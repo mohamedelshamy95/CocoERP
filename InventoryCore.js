@@ -469,9 +469,39 @@ function logInventoryTxnBatch_(payloads, opts) {
   const CHUNK = 500;
 
   const write_ = function () {
+    if (!rows.length) return 0;
+
+    // Idempotency: dedupe by stable Txn ID
+    const map = getHeaderMap_(ledgerSh);
+    const txnIdCol = map[APP.COLS.INV_TXNS.TXN_ID] || map['Txn ID'];
+    const existing = new Set();
+
+    if (txnIdCol) {
+      const lr = ledgerSh.getLastRow();
+      if (lr >= 2) {
+        const vals = ledgerSh.getRange(2, txnIdCol, lr - 1, 1).getValues();
+        for (let i = 0; i < vals.length; i++) {
+          const v = String(vals[i][0] || '').trim();
+          if (v) existing.add(v);
+        }
+      }
+    }
+
+    const seen = new Set();
+    const toWrite = [];
+
+    // Txn ID is the first column in INV_TXN_HEADERS
+    for (const r of rows) {
+      const id = String(r[0] || '').trim();
+      if (!id) continue;
+      if (existing.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      toWrite.push(r);
+    }
+
     let appended = 0;
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const chunk = rows.slice(i, i + CHUNK);
+    for (let i = 0; i < toWrite.length; i += CHUNK) {
+      const chunk = toWrite.slice(i, i + CHUNK);
       const start = ledgerSh.getLastRow() + 1;
       ledgerSh.getRange(start, 1, chunk.length, headers.length).setValues(chunk);
       appended += chunk.length;

@@ -68,9 +68,9 @@ function updateShipmentsCnUaeStatusAndTotals(opts) {
     const colEta = map[APP.COLS.SHIP_CN_UAE.ETA] || map['ETA'];
     const colArrival = map[APP.COLS.SHIP_CN_UAE.ARRIVAL] || map['Actual Arrival'];
     const colStatus = map[APP.COLS.SHIP_CN_UAE.STATUS] || map['Status'];
-    const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT] || map['Freight (AED)'];
-    const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER] || map['Other Fees (AED)'];
-    const colTotal = map[APP.COLS.SHIP_CN_UAE.TOTAL_COST] || map['Total Cost (AED)'];
+    const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT_AED] || map['Freight (AED)'];
+    const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER_AED] || map['Other Fees (AED)'];
+    const colTotal = map[APP.COLS.SHIP_CN_UAE.TOTAL_AED] || map['Total Cost (AED)'];
 
     if (!colShipmentId || !colStatus) {
       safeAlert_('Missing required headers in Shipments_CN_UAE (Shipment ID / Status).');
@@ -173,9 +173,9 @@ function _updateShipmentCnUaeStatusForRow_(sh, rowIndex, headerMap) {
   const colEta = map[APP.COLS.SHIP_CN_UAE.ETA] || map['ETA'];
   const colArrival = map[APP.COLS.SHIP_CN_UAE.ARRIVAL] || map['Actual Arrival'];
   const colStatus = map[APP.COLS.SHIP_CN_UAE.STATUS] || map['Status'];
-  const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT] || map['Freight (AED)'];
-  const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER] || map['Other Fees (AED)'];
-  const colTotal = map[APP.COLS.SHIP_CN_UAE.TOTAL_COST] || map['Total Cost (AED)'];
+  const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT_AED] || map['Freight (AED)'];
+  const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER_AED] || map['Other Fees (AED)'];
+  const colTotal = map[APP.COLS.SHIP_CN_UAE.TOTAL_AED] || map['Total Cost (AED)'];
 
   if (!colShipmentId || !colStatus) {
     // Required columns missing (header renamed or incomplete layout)
@@ -266,8 +266,8 @@ function shipmentsCnUaeOnEdit_(e) {
     const colShipDate = map[APP.COLS.SHIP_CN_UAE.SHIP_DATE] || map['Ship Date'];
     const colEta = map[APP.COLS.SHIP_CN_UAE.ETA] || map['ETA'];
     const colArrival = map[APP.COLS.SHIP_CN_UAE.ARRIVAL] || map['Actual Arrival'];
-    const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT] || map['Freight (AED)'];
-    const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER] || map['Other Fees (AED)'];
+    const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT_AED] || map['Freight (AED)'];
+    const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER_AED] || map['Other Fees (AED)'];
 
     if (!colShipmentId) return;
 
@@ -1020,7 +1020,7 @@ function seedShipmentsUaeEgFromInventoryUae() {
     const invWhCol = invMap[APP.COLS.INV_UAE.WAREHOUSE];
     const invPnCol = invMap[APP.COLS.INV_UAE.PRODUCT_NAME];
     const invVarCol = invMap[APP.COLS.INV_UAE.VARIANT];
-    const invQtyCol = invMap[APP.COLS.INV_UAE.ON_HAND_QTY];
+    const invQtyCol = invMap[APP.COLS.INV_UAE.ON_HAND];
 
     const shipIdCol = shipMap[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID];
     const shipWhCol = shipMap[APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE];
@@ -2241,6 +2241,8 @@ function syncShipmentsUaeEgToInventory() {
       // Optional columns: Product / Variant / Courier / Warehouse (UAE)
       const idxShipProdName = shipMap['Product Name'] ? shipMap['Product Name'] - 1 : null;
       const idxShipVariant = shipMap['Variant / Color'] ? shipMap['Variant / Color'] - 1 : null;
+      const colBoxId = shipMap[APP.COLS.SHIP_UAE_EG.BOX_ID] || shipMap['Box ID'];
+      const idxShipBoxId = colBoxId ? colBoxId - 1 : null;
       const colCourier = shipMap['Courier'] || shipMap['Courier Name'];
       const idxShipCourier = colCourier ? colCourier - 1 : null;
       const colShipWhUae = shipMap['Warehouse (UAE)'];
@@ -2289,23 +2291,32 @@ function syncShipmentsUaeEgToInventory() {
 
       const txns = [];
 
-      // Build a set of existing SHIP_UAE_EG ledger Source IDs to prevent duplicates on retries/crashes
+      // Build dedupe sets for SHIP_UAE_EG to prevent duplicates on retries/crashes and across code revisions
       const ledgerMap = getHeaderMap_(ledgerSh);
+      const idxLTxnId =
+        (ledgerMap[APP.COLS.INV_TXNS.TXN_ID] || ledgerMap['Txn ID'] || 0) - 1;
       const idxLSourceType =
         (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type'] || 0) - 1;
       const idxLSourceId =
         (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID'] || 0) - 1;
 
-      const existingKeys = new Set();
+      const existingSourceIds = new Set();
+      const existingTxnIds = new Set();
       const lr = ledgerSh.getLastRow();
 
-      if (lr >= 2 && idxLSourceType >= 0 && idxLSourceId >= 0) {
+      if (lr >= 2 && idxLSourceType >= 0) {
         const lvals = ledgerSh.getRange(2, 1, lr - 1, ledgerSh.getLastColumn()).getValues();
         for (const r of lvals) {
           const st = String(r[idxLSourceType] || '').trim();
-          if (st === 'SHIP_UAE_EG') {
+          if (st !== 'SHIP_UAE_EG') continue;
+
+          if (idxLSourceId >= 0) {
             const sid = String(r[idxLSourceId] || '').trim();
-            if (sid) existingKeys.add(sid);
+            if (sid) existingSourceIds.add(sid);
+          }
+          if (idxLTxnId >= 0) {
+            const tid = String(r[idxLTxnId] || '').trim();
+            if (tid) existingTxnIds.add(tid);
           }
         }
       }
@@ -2332,13 +2343,22 @@ function syncShipmentsUaeEgToInventory() {
         }
 
         const sheetRow = idx + 2; // actual row number in sheet
-        const baseKey = `SUEG|${shipmentId}|${sku}|R${sheetRow}|S${qtySynced}|D${delta}`;
 
+        // Line discriminator: SKU can repeat within the same Shipment ID (across boxes/rows)
+        const boxId = (idxShipBoxId != null) ? String(row[idxShipBoxId] || '').trim() : '';
+        const vKey = (idxShipVariant != null) ? String(row[idxShipVariant] || '').trim() : '';
+        const lineDiscriminator = boxId ? ('B' + boxId) : ('R' + sheetRow);
+
+        // Operation key encodes the pre-sync Qty Synced and the delta, so retries don't duplicate
+        const baseKey = `SUEG|${shipmentId}|${lineDiscriminator}|${sku}|${vKey}|S${qtySynced}|D${delta}`;
         const sourceIdOut = `${baseKey}|OUT`;
         const sourceIdIn = `${baseKey}|IN`;
 
-        const outExists = existingKeys.has(sourceIdOut);
-        const inExists = existingKeys.has(sourceIdIn);
+        // Dedupe: prefer Txn ID check (covers legacy sourceId=Shipment ID), fallback to Source ID check
+        // Fast dedupe (crash-retry) by Source ID; full Txn-ID dedupe is done after we compute cost/warehouse.
+        let outExists = existingSourceIds.has(sourceIdOut);
+        let inExists = existingSourceIds.has(sourceIdIn);
+
 
         const shipDate = row[idxShipShipDate] || new Date();
         const arrDate = (idxShipArrival != null) ? (row[idxShipArrival] || null) : null;
@@ -2430,12 +2450,84 @@ function syncShipmentsUaeEgToInventory() {
           (idxShipVariant != null ? row[idxShipVariant] : '') ||
           '';
 
+
+        const toWarehouse = (APP.WAREHOUSES && APP.WAREHOUSES.TAN_GH) ? APP.WAREHOUSES.TAN_GH : 'TAN-GH';
+
+        // Txn-ID based dedupe (covers legacy Source ID scheme and prevents duplicates across code revisions)
+        const outTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
+          type: 'OUT',
+          sourceType: 'SHIP_UAE_EG',
+          sourceId: sourceIdOut,
+          batchCode: batchCode,
+          sku: String(sku),
+          warehouse: fromWarehouse,
+          qtyIn: 0,
+          qtyOut: delta,
+          unitCostEgp: baseCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: shipDate
+        }) : '';
+
+        const inTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
+          type: 'IN',
+          sourceType: 'SHIP_UAE_EG',
+          sourceId: sourceIdIn,
+          batchCode: batchCode,
+          sku: String(sku),
+          warehouse: toWarehouse,
+          qtyIn: delta,
+          qtyOut: 0,
+          unitCostEgp: landedCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: inTxnDate
+        }) : '';
+
+        const outLegacyTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
+          type: 'OUT',
+          sourceType: 'SHIP_UAE_EG',
+          sourceId: String(shipmentId),
+          batchCode: batchCode,
+          sku: String(sku),
+          warehouse: fromWarehouse,
+          qtyIn: 0,
+          qtyOut: delta,
+          unitCostEgp: baseCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: shipDate
+        }) : '';
+
+        const inLegacyTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
+          type: 'IN',
+          sourceType: 'SHIP_UAE_EG',
+          sourceId: String(shipmentId),
+          batchCode: batchCode,
+          sku: String(sku),
+          warehouse: toWarehouse,
+          qtyIn: delta,
+          qtyOut: 0,
+          unitCostEgp: landedCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: inTxnDate
+        }) : '';
+
+        if (!outExists && ((outTxnId && existingTxnIds.has(outTxnId)) || (outLegacyTxnId && existingTxnIds.has(outLegacyTxnId)))) {
+          outExists = true;
+        }
+        if (!inExists && ((inTxnId && existingTxnIds.has(inTxnId)) || (inLegacyTxnId && existingTxnIds.has(inLegacyTxnId)))) {
+          inExists = true;
+        }
+
         // ===== OUT from UAE warehouse =====
         if (!outExists) {
           txns.push({
+            txnId: outTxnId || undefined,
             type: 'OUT',
             sourceType: 'SHIP_UAE_EG',
-            sourceId: String(shipmentId),
+            sourceId: sourceIdOut,
             batchCode: batchCode,
             sku: String(sku),
             productName: String(productName || ''),
@@ -2447,26 +2539,36 @@ function syncShipmentsUaeEgToInventory() {
             txnDate: shipDate,
             notes: 'UAE→EG OUT (' + fromWarehouse + '), delta=' + delta
           });
+
+          outCount++;
+          existingSourceIds.add(sourceIdOut);
+          if (outTxnId) existingTxnIds.add(outTxnId);
         }
 
         // ===== IN to TAN-GH at landed cost =====
         if (!inExists) {
           txns.push({
+            txnId: inTxnId || undefined,
             type: 'IN',
             sourceType: 'SHIP_UAE_EG',
-            sourceId: String(shipmentId),
+            sourceId: sourceIdIn,
             batchCode: batchCode,
             sku: String(sku),
             productName: String(productName || ''),
             variant: String(variant || ''),
-            warehouse: (APP.WAREHOUSES && APP.WAREHOUSES.TAN_GH) ? APP.WAREHOUSES.TAN_GH : 'TAN-GH',
+            warehouse: toWarehouse,
             qty: delta,
             unitCostEgp: landedCost,
             currency: 'EGP',
             txnDate: inTxnDate,
-            notes: 'UAE→EG IN (TAN-GH), delta=' + delta + ', landedCost=' + landedCost.toFixed(2)
+            notes: 'UAE→EG IN (' + toWarehouse + '), delta=' + delta + ', landedCost=' + landedCost.toFixed(2)
           });
+
+          inCount++;
+          existingSourceIds.add(sourceIdIn);
+          if (inTxnId) existingTxnIds.add(inTxnId);
         }
+
 
         // Update Qty Synced (safe حتى لو الاتنين كانوا موجودين)
         row[idxShipQtySynced] = qtyCurrent;

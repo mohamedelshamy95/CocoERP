@@ -51,9 +51,9 @@ const SHIP_CN_UAE_HEADERS = [
   'Gross Weight (kg)',
   'Volume (CBM)',
 
-  APP.COLS.SHIP_CN_UAE.FREIGHT,
-  APP.COLS.SHIP_CN_UAE.OTHER,
-  APP.COLS.SHIP_CN_UAE.TOTAL_COST,
+  APP.COLS.SHIP_CN_UAE.FREIGHT_AED,
+  APP.COLS.SHIP_CN_UAE.OTHER_AED,
+  APP.COLS.SHIP_CN_UAE.TOTAL_AED,
 
   APP.COLS.PURCHASES.NOTES
 ];
@@ -166,9 +166,9 @@ function setupShipmentsCnUae_() {
   _applyIntFormatByHeaders_(sh, map, [APP.COLS.PURCHASES.QTY]);
 
   _applyDecimalFormatByHeaders_(sh, map, [
-    APP.COLS.SHIP_CN_UAE.FREIGHT,
-    APP.COLS.SHIP_CN_UAE.OTHER,
-    APP.COLS.SHIP_CN_UAE.TOTAL_COST,
+    APP.COLS.SHIP_CN_UAE.FREIGHT_AED,
+    APP.COLS.SHIP_CN_UAE.OTHER_AED,
+    APP.COLS.SHIP_CN_UAE.TOTAL_AED,
     'Gross Weight (kg)',
     'Volume (CBM)'
   ]);
