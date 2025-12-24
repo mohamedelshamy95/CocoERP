@@ -356,7 +356,7 @@ function setupPurchasesLayoutHardReset() {
     const setSh = ensureSheet_(APP.SHEETS.SETTINGS);
 
     // Confirm (manual UI only). In triggers/automation this returns false safely.
-    if (!safeConfirm_('تحذير', 'ده هيمسح Purchases و Settings بالكامل. متأكد؟')) return;
+    if (!safeConfirm_('تحذير', 'ده هيمسح Purchases و Settings بالكامل. متأكد؟', { ui: true })) return;
 
     // Reset Settings
     setSh.clear();

@@ -862,7 +862,12 @@ function inv_rebuildAllSnapshots() {
 
     // Optional: seed UAE→EG planning rows after snapshots rebuild
     if (typeof seedShipmentsUaeEgFromInventoryUae === 'function') {
-      seedShipmentsUaeEgFromInventoryUae();
+      try {
+        seedShipmentsUaeEgFromInventoryUae();
+      } catch (e) {
+        logError_('inv_rebuildAllSnapshots.seedShipmentsUaeEgFromInventoryUae', e);
+        // Non-fatal: inventory snapshots should still be considered rebuilt.
+      }
     }
 
     if (typeof safeAlert_ === 'function') {

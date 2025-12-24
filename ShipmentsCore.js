@@ -1013,6 +1013,16 @@ function seedShipmentsUaeEgFromInventoryUae() {
     const invSh = getSheet_(APP.SHEETS.INVENTORY_UAE);
     const shipSh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
 
+    // Repair known blank header (Status → Warehouse (UAE)) and ensure required schema additions (e.g., Line ID).
+    try {
+      if (typeof SHIP_UAE_EG_HEADERS !== 'undefined') {
+        repairBlankHeadersByPosition_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, 1);
+        ensureSheetSchema_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, { addMissing: true });
+      }
+    } catch (e) {
+      logError_('seedShipmentsUaeEgFromInventoryUae.preflight', e);
+    }
+
     const invMap = getHeaderMap_(invSh);
     const shipMap = getHeaderMap_(shipSh);
 
@@ -1034,7 +1044,13 @@ function seedShipmentsUaeEgFromInventoryUae() {
 
     if (!invSkuCol || !invWhCol) throw new Error('Inventory_UAE missing required headers (SKU/Warehouse).');
     if (!shipIdCol || !shipWhCol || !shipSkuCol) {
-      throw new Error('Shipments_UAE_EG missing required headers (Shipment ID / Warehouse (UAE) / SKU). Run Setup Shipments Layouts.');
+      const err = new Error('Shipments_UAE_EG missing required headers (Shipment ID / Warehouse (UAE) / SKU). Run Setup Shipments Layouts.');
+      logError_('seedShipmentsUaeEgFromInventoryUae', err, {
+        hasShipmentId: !!shipIdCol,
+        hasWarehouseUAE: !!shipWhCol,
+        hasSku: !!shipSkuCol
+      });
+      return; // non-fatal: allow snapshot rebuild to continue
     }
 
     const invLast = invSh.getLastRow();
@@ -1356,11 +1372,11 @@ function qc_generateFromPurchasesPrompt() {
       ? safePromptText_(
         'Generate QC_UAE',
         'Optional: Enter a single Order ID to generate QC only for that order.\n\nLeave empty to generate QC for all eligible orders.'
-      )
+        , null, { ui: true })
       : null;
     if (orderIdFilter === null) return;
     qc_generateFromPurchases_(orderIdFilter || null);
-    if (typeof safeAlert_ === 'function') safeAlert_('QC_UAE generation triggered.');
+    if (typeof safeAlert_ === 'function') safeAlert_('QC_UAE generation triggered.', null, { ui: true });
   } catch (err) {
     logError_('qc_generateFromPurchasesPrompt', err);
     throw err;
@@ -2186,6 +2202,16 @@ function syncShipmentsUaeEgToInventory() {
       const invUaeSh = getSheet_(APP.SHEETS.INVENTORY_UAE);
       const ledgerSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
 
+      // Repair known blank header (Status → Warehouse (UAE)) in-place and ensure persistent Line ID column exists.
+      try {
+        if (typeof SHIP_UAE_EG_HEADERS !== 'undefined') {
+          repairBlankHeadersByPosition_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, 1);
+          ensureSheetSchema_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, { addMissing: true });
+        }
+      } catch (e) {
+        logError_('syncShipmentsUaeEgToInventory.preflight', e);
+      }
+
       const shipMap = getHeaderMap_(shipSh);
       const invUaeMap = getHeaderMap_(invUaeSh);
 
@@ -2243,9 +2269,11 @@ function syncShipmentsUaeEgToInventory() {
       const idxShipVariant = shipMap['Variant / Color'] ? shipMap['Variant / Color'] - 1 : null;
       const colBoxId = shipMap[APP.COLS.SHIP_UAE_EG.BOX_ID] || shipMap['Box ID'];
       const idxShipBoxId = colBoxId ? colBoxId - 1 : null;
+      const colLineId = shipMap[APP.COLS.SHIP_UAE_EG.LINE_ID] || shipMap['Line ID'];
+      const idxShipLineId = colLineId ? colLineId - 1 : null;
       const colCourier = shipMap['Courier'] || shipMap['Courier Name'];
       const idxShipCourier = colCourier ? colCourier - 1 : null;
-      const colShipWhUae = shipMap['Warehouse (UAE)'];
+      const colShipWhUae = shipMap[APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE] || shipMap['Warehouse (UAE)'];
       const idxShipWhUae = colShipWhUae ? colShipWhUae - 1 : null;
 
       // ===== Inventory_UAE map: SKU+Warehouse → cost info =====
@@ -2288,6 +2316,7 @@ function syncShipmentsUaeEgToInventory() {
 
       let outCount = 0;
       let inCount = 0;
+      let lineIdsChanged = false;
 
       const txns = [];
 
@@ -2347,7 +2376,21 @@ function syncShipmentsUaeEgToInventory() {
         // Line discriminator: SKU can repeat within the same Shipment ID (across boxes/rows)
         const boxId = (idxShipBoxId != null) ? String(row[idxShipBoxId] || '').trim() : '';
         const vKey = (idxShipVariant != null) ? String(row[idxShipVariant] || '').trim() : '';
-        const lineDiscriminator = boxId ? ('B' + boxId) : ('R' + sheetRow);
+        // Policy: Box ID first; if Box ID is empty use a persistent per-row Line ID (never sheet row number, since sorting/filtering occurs).
+        let lineId = '';
+        if (!boxId) {
+          if (idxShipLineId == null) {
+            logError_('syncShipmentsUaeEgToInventory', new Error('Missing Line ID column in Shipments_UAE_EG (required when Box ID is empty).'), { shipmentId: shipmentId, sku: sku, row: sheetRow });
+            return;
+          }
+          lineId = String(row[idxShipLineId] || '').trim();
+          if (!lineId) {
+            lineId = 'L-' + Utilities.getUuid();
+            row[idxShipLineId] = lineId;
+            lineIdsChanged = true;
+          }
+        }
+        const lineDiscriminator = boxId ? ('B' + boxId) : ('L' + lineId);
 
         // Operation key encodes the pre-sync Qty Synced and the delta, so retries don't duplicate
         const baseKey = `SUEG|${shipmentId}|${lineDiscriminator}|${sku}|${vKey}|S${qtySynced}|D${delta}`;
@@ -2573,6 +2616,13 @@ function syncShipmentsUaeEgToInventory() {
         // Update Qty Synced (safe حتى لو الاتنين كانوا موجودين)
         row[idxShipQtySynced] = qtyCurrent;
       });
+
+      // Persist any newly generated Line IDs BEFORE writing ledger rows (crash-safety for idempotency).
+      if (lineIdsChanged && colLineId && idxShipLineId != null) {
+        shipSh.getRange(2, colLineId, shipData.length, 1).setValues(shipData.map(function (r) {
+          return [r[idxShipLineId] || ''];
+        }));
+      }
 
       // Write txns in one batch (faster + one lock)
       if (txns.length) {

@@ -89,7 +89,7 @@ function setupOrdersLayoutHardReset() {
 
     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
     // Manual confirmation only (safe in triggers/editor: returns false)
-    if (!safeConfirm_('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟')) return;
+    if (!safeConfirm_('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', { ui: true })) return;
 
     orders_removeFilterIfAny_(shO);
     shO.clear();

@@ -175,6 +175,7 @@ const APP = {
       ETA: 'ETA',
       ARRIVAL: 'Actual Arrival',
       STATUS: 'Status',
+      WAREHOUSE_UAE: 'Warehouse (UAE)',
       SKU: 'SKU',
       PRODUCT_NAME: 'Product Name',
       VARIANT: 'Variant / Color',
@@ -184,6 +185,7 @@ const APP = {
       CUSTOMS: 'Customs (EGP)',
       OTHER: 'Other (EGP)',
       TOTAL_COST: 'Total Cost (EGP)',
+      LINE_ID: 'Line ID',
       NOTES: 'Notes'
     },
 
@@ -613,19 +615,19 @@ function isDeliveredStatus_(status) {
   return false;
 }
 
-/* eslint-disable no-restricted-properties */
-function tryGetUi_() {
-  try {
-    return SpreadsheetApp.getUi();
-  } catch (_e) {
-    return null;
-  }
+/**
+ * UI access is ONLY allowed when explicitly requested from a manual menu action.
+ * Never call SpreadsheetApp.getUi() from automation/trigger/queue paths.
+ */
+function getUiIfAllowed_(opts) {
+  if (!opts || opts.ui !== true) return null;
+  return SpreadsheetApp.getUi();
 }
 /* eslint-enable no-restricted-properties */
 
-function safeAlert_(msg, title) {
+function safeAlert_(msg, title, opts) {
   try {
-    const ui = tryGetUi_();
+    const ui = getUiIfAllowed_(opts);
     if (ui) {
       ui.alert(title ? String(title) : 'CocoERP', String(msg || ''));
     } else {
@@ -636,8 +638,8 @@ function safeAlert_(msg, title) {
   }
 }
 
-function safeConfirm_(title, msg) {
-  const ui = tryGetUi_();
+function safeConfirm_(title, msg, opts) {
+  const ui = getUiIfAllowed_(opts);
   if (!ui) {
     Logger.log('CONFIRM SKIPPED (no UI): ' + String(title || '') + ' :: ' + String(msg || ''));
     return false;
@@ -646,8 +648,8 @@ function safeConfirm_(title, msg) {
   return res === ui.Button.YES;
 }
 
-function safePromptText_(title, msg, defaultValue) {
-  const ui = tryGetUi_();
+function safePromptText_(title, msg, defaultValue, opts) {
+  const ui = getUiIfAllowed_(opts);
   if (!ui) {
     Logger.log('PROMPT SKIPPED (no UI): ' + String(title || '') + ' :: ' + String(msg || ''));
     return null;
@@ -657,7 +659,6 @@ function safePromptText_(title, msg, defaultValue) {
   const t = res.getResponseText();
   return t != null && String(t).trim() !== '' ? String(t).trim() : (defaultValue != null ? String(defaultValue) : '');
 }
-
 
 /**
  * Trigger-safe confirm dialog.
