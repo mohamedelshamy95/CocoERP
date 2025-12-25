@@ -2331,23 +2331,78 @@ function syncShipmentsUaeEgToInventory() {
 
       const existingSourceIds = new Set();
       const existingTxnIds = new Set();
+
+      // UAE moving-average cost basis derived from ledger (do NOT trust Inventory_UAE snapshot)
+      const uaeBasis = {};    // key: sku||warehouse -> { qty, val, avg }
+      const uaeAvailQty = {}; // key: sku||warehouse -> qty (for overship checks)
+
       const lr = ledgerSh.getLastRow();
-
-      if (lr >= 2 && idxLSourceType >= 0) {
+      if (lr >= 2) {
         const lvals = ledgerSh.getRange(2, 1, lr - 1, ledgerSh.getLastColumn()).getValues();
-        for (const r of lvals) {
-          const st = String(r[idxLSourceType] || '').trim();
-          if (st !== 'SHIP_UAE_EG') continue;
 
-          if (idxLSourceId >= 0) {
-            const sid = String(r[idxLSourceId] || '').trim();
-            if (sid) existingSourceIds.add(sid);
+        // Extra indices needed for UAE cost basis
+        const idxLSku = (ledgerMap[APP.COLS.INV_TXNS.SKU] || ledgerMap['SKU'] || 0) - 1;
+        const idxLWh = (ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] || ledgerMap['Warehouse'] || 0) - 1;
+        const idxLQtyIn = (ledgerMap[APP.COLS.INV_TXNS.QTY_IN] || ledgerMap['Qty In'] || 0) - 1;
+        const idxLQtyOut = (ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] || ledgerMap['Qty Out'] || 0) - 1;
+        const idxLUnitCost = (ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] || ledgerMap['Unit Cost (EGP)'] || 0) - 1;
+        const idxLTotalCost = (ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] || ledgerMap['Total Cost (EGP)'] || 0) - 1;
+
+        for (const r of lvals) {
+          // 1) Dedupe sets (only for SHIP_UAE_EG)
+          if (idxLSourceType >= 0) {
+            const st = String(r[idxLSourceType] || '').trim();
+            if (st === 'SHIP_UAE_EG') {
+              if (idxLSourceId >= 0) {
+                const sid = String(r[idxLSourceId] || '').trim();
+                if (sid) existingSourceIds.add(sid);
+              }
+              if (idxLTxnId >= 0) {
+                const tid = String(r[idxLTxnId] || '').trim();
+                if (tid) existingTxnIds.add(tid);
+              }
+            }
           }
-          if (idxLTxnId >= 0) {
-            const tid = String(r[idxLTxnId] || '').trim();
-            if (tid) existingTxnIds.add(tid);
+
+          // 2) UAE cost basis from ledger (all source types)
+          if (idxLSku < 0 || idxLWh < 0 || idxLQtyIn < 0 || idxLQtyOut < 0) continue;
+
+          const skuL = String(r[idxLSku] || '').trim();
+          let whL = String(r[idxLWh] || '').trim();
+          if (!skuL || !whL) continue;
+
+          if (typeof normalizeWarehouseCode_ === 'function') {
+            whL = normalizeWarehouseCode_(whL);
           }
+
+          if (!_inv_isUaeWarehouse_(whL)) continue;
+
+          const qIn = Number(r[idxLQtyIn] || 0);
+          const qOut = Number(r[idxLQtyOut] || 0);
+          if (qIn === 0 && qOut === 0) continue;
+
+          const u = (idxLUnitCost >= 0) ? Number(r[idxLUnitCost] || 0) : 0;
+          const t = (idxLTotalCost >= 0) ? Number(r[idxLTotalCost] || 0) : 0;
+
+          // Ledger convention: Total Cost is positive for both IN and OUT
+          // Snapshot basis must NET value: val += IN - OUT
+          const vIn = (qIn > 0) ? (t || (u * qIn)) : 0;
+          const vOut = (qOut > 0) ? (t || (u * qOut)) : 0;
+
+          const k = skuL + '||' + whL;
+          if (!uaeBasis[k]) uaeBasis[k] = { qty: 0, val: 0 };
+          uaeBasis[k].qty += (qIn - qOut);
+          uaeBasis[k].val += (vIn - vOut);
         }
+
+        // finalize avg + available qty
+        Object.keys(uaeBasis).forEach(function (k) {
+          const rec = uaeBasis[k];
+          const qty = Number(rec.qty || 0);
+          const val = Number(rec.val || 0);
+          rec.avg = (qty > 0) ? (val / qty) : 0;
+          uaeAvailQty[k] = qty;
+        });
       }
 
       // Process shipments rows
@@ -2407,13 +2462,32 @@ function syncShipmentsUaeEgToInventory() {
         const arrDate = (idxShipArrival != null) ? (row[idxShipArrival] || null) : null;
         const inTxnDate = arrDate || shipDate;
 
-        // Total extras (ship/customs/other) per unit (for landed cost)
-        const shipCost = idxShipShipCost != null ? Number(row[idxShipShipCost] || 0) : 0;
-        const customs = idxShipCustoms != null ? Number(row[idxShipCustoms] || 0) : 0;
-        const other = idxShipOther != null ? Number(row[idxShipOther] || 0) : 0;
-        const totalExtras = (idxShipTotal != null)
-          ? Number(row[idxShipTotal] || (shipCost + customs + other))
-          : (shipCost + customs + other);
+        // Extras policy (confirmed):
+        // - Ship Cost is PER-UNIT
+        // - Customs/Other are LINE TOTALS allocated across ORIGINAL line Qty (Qty column)
+        const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
+        const customsLine = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
+        const otherLine = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
+
+        const qtyOriginal = qtyCurrent; // Qty column is the original line qty
+
+        const extrasPerUnit = (qtyOriginal > 0)
+          ? (shipCostPerUnit + ((customsLine + otherLine) / qtyOriginal))
+          : 0;
+
+        // Keep Total Cost (EGP) column consistent as a LINE TOTAL
+        if (idxShipTotal != null) {
+          row[idxShipTotal] = (qtyOriginal * shipCostPerUnit) + customsLine + otherLine;
+        }
+
+        // Cost basis for OUT must come from ledger-derived moving average (not Inventory_UAE snapshot)
+        const keyWh2 = String(sku) + '||' + String(fromWarehouse);
+        const baseCost = (uaeBasis[keyWh2] && typeof uaeBasis[keyWh2].avg === 'number')
+          ? Number(uaeBasis[keyWh2].avg || 0)
+          : Number(info.avgCost || 0); // fallback only
+
+        const landedCost = baseCost + extrasPerUnit;
+
 
         // === Determine UAE warehouse for OUT ===
         let fromWarehouse = '';
@@ -2454,10 +2528,6 @@ function syncShipmentsUaeEgToInventory() {
           row[idxShipWhUae] = info.warehouse;
           fromWarehouse = info.warehouse;
         }
-
-        const baseCost = info.avgCost || 0; // UAE avg cost
-        const extrasPerUnit = qtyCurrent > 0 ? totalExtras / qtyCurrent : 0;
-        const landedCost = baseCost + extrasPerUnit;
 
         // Fill Product / Variant if missing
         if (idxShipProdName != null && !row[idxShipProdName] && info.product) {
@@ -2562,6 +2632,22 @@ function syncShipmentsUaeEgToInventory() {
         }
         if (!inExists && ((inTxnId && existingTxnIds.has(inTxnId)) || (inLegacyTxnId && existingTxnIds.has(inLegacyTxnId)))) {
           inExists = true;
+        }
+
+        // Overship guard: delta cannot exceed current UAE on-hand for this SKU+warehouse
+        if (uaeAvailQty[keyWh2] != null && !outExists) {
+          if (delta > uaeAvailQty[keyWh2]) {
+            logError_('syncShipmentsUaeEgToInventory', new Error('Over-ship detected (delta exceeds UAE on-hand).'), {
+              shipmentId: shipmentId,
+              sku: sku,
+              fromWarehouse: fromWarehouse,
+              delta: delta,
+              onHand: uaeAvailQty[keyWh2]
+            });
+            return;
+          }
+          // consume availability for subsequent rows
+          uaeAvailQty[keyWh2] -= delta;
         }
 
         // ===== OUT from UAE warehouse =====

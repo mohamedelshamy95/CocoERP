@@ -597,56 +597,64 @@ function rebuildInventoryUAEFromLedger() {
 
     const lastRow = ledgerSh.getLastRow();
 
-    // لو مفيش حركات → امسح Snapshot وخلاص
+    // No ledger rows → clear snapshot
     if (lastRow < 2) {
       if (invSh.getLastRow() > 1) {
-        invSh
-          .getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn())
-          .clearContent();
+        invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
       }
       return;
     }
 
-    const data = ledgerSh
-      .getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn())
-      .getValues();
+    const data = ledgerSh.getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn()).getValues();
 
-    const idxSku = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
-    const idxWh = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
-    const idxProduct = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
-    const idxVariant = ledgerMap[APP.COLS.INV_TXNS.VARIANT] - 1;
-    const idxQtyIn = ledgerMap[APP.COLS.INV_TXNS.QTY_IN] - 1;
-    const idxQtyOut = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
-    const idxUnitCost = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] - 1;
-    const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] - 1;
-    const idxTxnDate = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] - 1;
-    const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
-    const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
+    const idxSku = (ledgerMap[APP.COLS.INV_TXNS.SKU] || ledgerMap['SKU']) - 1;
+    const idxWh = (ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] || ledgerMap['Warehouse']) - 1;
+    const idxProduct = (ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] || ledgerMap['Product Name']) - 1;
+    const idxVariant = (ledgerMap[APP.COLS.INV_TXNS.VARIANT] || ledgerMap['Variant / Color']) - 1;
+    const idxQtyIn = (ledgerMap[APP.COLS.INV_TXNS.QTY_IN] || ledgerMap['Qty In']) - 1;
+    const idxQtyOut = (ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] || ledgerMap['Qty Out']) - 1;
+    const idxUnitCost = (ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] || ledgerMap['Unit Cost (EGP)']) - 1;
+    const idxTotalCost = (ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] || ledgerMap['Total Cost (EGP)']) - 1;
+    const idxTxnDate = (ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] || ledgerMap['Txn Date']) - 1;
+    const idxSrcType = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type']) - 1;
+    const idxSrcId = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID']) - 1;
 
-    // تجميع حسب (SKU + Warehouse + Variant) لمخازن الإمارات فقط
+    // Aggregate by (SKU + Warehouse + Variant) for UAE warehouses only
     const keyMap = {};
+
     data.forEach(function (row) {
       const sku = row[idxSku];
       if (!sku) return;
 
-      const whRaw = row[idxWh];
-      const wh = (whRaw || '').toString().trim();
+      let wh = (row[idxWh] || '').toString().trim();
       if (!wh) return;
 
-      const whUpper = wh.toUpperCase();
-      if (!_inv_isUaeWarehouse_(wh)) { return; }
+      if (typeof normalizeWarehouseCode_ === 'function') {
+        wh = normalizeWarehouseCode_(wh);
+      }
+
+      if (!_inv_isUaeWarehouse_(wh)) return;
+
+      const qtyIn = Number(row[idxQtyIn] || 0);
+      const qtyOut = Number(row[idxQtyOut] || 0);
+      if (qtyIn === 0 && qtyOut === 0) return;
 
       const product = row[idxProduct];
       const variant = row[idxVariant];
-      const qtyIn = Number(row[idxQtyIn] || 0);
-      const qtyOut = Number(row[idxQtyOut] || 0);
       const unitCost = Number(row[idxUnitCost] || 0);
-      const totalCost = Number(row[idxTotalCost] || 0) || unitCost * qtyIn;
+      const totalCostCell = Number(row[idxTotalCost] || 0);
+
+      // Deterministic valuation:
+      // - IN value adds
+      // - OUT value subtracts
+      const valIn = (qtyIn > 0) ? (totalCostCell || (unitCost * qtyIn)) : 0;
+      const valOut = (qtyOut > 0) ? (totalCostCell || (unitCost * qtyOut)) : 0;
+
       const txnDate = row[idxTxnDate];
       const srcType = row[idxSrcType];
       const srcId = row[idxSrcId];
 
-      const key = sku + '||' + wh + '||' + (variant || '');
+      const key = String(sku) + '||' + String(wh) + '||' + String(variant || '');
 
       if (!keyMap[key]) {
         keyMap[key] = {
@@ -663,8 +671,9 @@ function rebuildInventoryUAEFromLedger() {
       }
 
       const rec = keyMap[key];
+
       rec.onHand += qtyIn - qtyOut;
-      rec.totalCost += totalCost;
+      rec.totalCost += (valIn - valOut);
 
       if (txnDate && (!rec.lastDate || txnDate > rec.lastDate)) {
         rec.lastDate = txnDate;
@@ -673,24 +682,29 @@ function rebuildInventoryUAEFromLedger() {
       }
     });
 
-    // امسح Snapshot القديم
+    // Clear snapshot
     if (invSh.getLastRow() > 1) {
-      invSh
-        .getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn())
-        .clearContent();
+      invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
     }
 
     const invHeaders = Object.keys(invMap).sort(function (a, b) {
       return invMap[a] - invMap[b];
     });
+
     const rows = [];
 
     Object.keys(keyMap).forEach(function (key) {
       const r = keyMap[key];
 
-      if (!INV_SNAPSHOT_KEEP_ZERO && !r.onHand && !r.totalCost) return;
+      // Clamp tiny float noise
+      if (Math.abs(r.onHand) < 1e-9) r.onHand = 0;
 
-      const avgCost = r.onHand ? r.totalCost / r.onHand : 0;
+      // Critical invariant: Qty==0 ⇒ Value==0 (prevents “qty clamps but value doesn’t”)
+      if (r.onHand === 0) r.totalCost = 0;
+
+      if (!INV_SNAPSHOT_KEEP_ZERO && r.onHand === 0) return;
+
+      const avgCost = (r.onHand > 0) ? (r.totalCost / r.onHand) : 0;
 
       const rowObj = {};
       rowObj['SKU'] = r.sku;
@@ -709,6 +723,7 @@ function rebuildInventoryUAEFromLedger() {
       const rowArr = invHeaders.map(function (h) {
         return rowObj[h] !== undefined ? rowObj[h] : '';
       });
+
       rows.push(rowArr);
     });
 
@@ -733,6 +748,7 @@ function rebuildInventoryEGFromLedger() {
 
     // Self-heal common ledger header drift (Warehouse duplicates)
     try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
+
     const ledgerMap = getHeaderMap_(ledgerSh);
     const invMap = getHeaderMap_(invSh);
 
@@ -746,41 +762,49 @@ function rebuildInventoryEGFromLedger() {
 
     const data = ledgerSh.getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn()).getValues();
 
-    const idxSku = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
-    const idxWh = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
-    const idxProd = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
-    const idxVar = ledgerMap[APP.COLS.INV_TXNS.VARIANT] - 1;
-    const idxQtyIn = ledgerMap[APP.COLS.INV_TXNS.QTY_IN] - 1;
-    const idxQtyOut = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
-    const idxUnitCost = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] - 1;
-    const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] - 1;
-    const idxTxnDate = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] - 1;
-    const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
-    const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
+    const idxSku = (ledgerMap[APP.COLS.INV_TXNS.SKU] || ledgerMap['SKU']) - 1;
+    const idxWh = (ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] || ledgerMap['Warehouse']) - 1;
+    const idxProd = (ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] || ledgerMap['Product Name']) - 1;
+    const idxVar = (ledgerMap[APP.COLS.INV_TXNS.VARIANT] || ledgerMap['Variant / Color']) - 1;
+    const idxQtyIn = (ledgerMap[APP.COLS.INV_TXNS.QTY_IN] || ledgerMap['Qty In']) - 1;
+    const idxQtyOut = (ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] || ledgerMap['Qty Out']) - 1;
+    const idxUnitCost = (ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] || ledgerMap['Unit Cost (EGP)']) - 1;
+    const idxTotalCost = (ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] || ledgerMap['Total Cost (EGP)']) - 1;
+    const idxTxnDate = (ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] || ledgerMap['Txn Date']) - 1;
+    const idxSrcType = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type']) - 1;
+    const idxSrcId = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID']) - 1;
 
     const keyMap = {};
 
-    data.forEach(row => {
-      const wh = (row[idxWh] || '').toString().trim().toUpperCase();
-      if (!_inv_isEgWarehouse_(wh)) return;
+    data.forEach(function (row) {
+      let wh = (row[idxWh] || '').toString().trim();
+      if (!wh) return;
+
+      if (typeof normalizeWarehouseCode_ === 'function') {
+        wh = normalizeWarehouseCode_(wh);
+      }
+
+      const whUpper = wh.toUpperCase();
+      if (!_inv_isEgWarehouse_(whUpper)) return;
 
       const qtyIn = Number(row[idxQtyIn] || 0);
       const qtyOut = Number(row[idxQtyOut] || 0);
       if (qtyIn === 0 && qtyOut === 0) return;
 
       const sku = row[idxSku];
-      const key = sku + '||' + wh + '||' + (row[idxVar] || '');
+      if (!sku) return;
+
+      const variant = row[idxVar] || '';
+      const key = String(sku) + '||' + String(whUpper) + '||' + String(variant);
 
       if (!keyMap[key]) {
         keyMap[key] = {
           sku: sku,
           product: row[idxProd],
-          variant: row[idxVar],
-          warehouse: wh,
-          qtyIn: 0,
-          qtyOut: 0,
-          totalCostIn: 0,
-          lastUnitCost: 0,
+          variant: variant,
+          warehouse: whUpper,
+          onHand: 0,
+          totalCost: 0,
           lastDate: null,
           lastSrcType: '',
           lastSrcId: ''
@@ -789,57 +813,55 @@ function rebuildInventoryEGFromLedger() {
 
       const rec = keyMap[key];
 
-      // نعتبر فقط الحركات IN للتكلفة
-      if (qtyIn > 0) {
-        const unitCost = Number(row[idxUnitCost] || 0);
-        const totalCost = Number(row[idxTotalCost] || unitCost * qtyIn);
-        rec.qtyIn += qtyIn;
-        rec.totalCostIn += totalCost;
-        rec.lastUnitCost = unitCost;
-      }
+      const unitCost = Number(row[idxUnitCost] || 0);
+      const totalCostCell = Number(row[idxTotalCost] || 0);
 
-      rec.qtyOut += qtyOut;
+      const valIn = (qtyIn > 0) ? (totalCostCell || (unitCost * qtyIn)) : 0;
+      const valOut = (qtyOut > 0) ? (totalCostCell || (unitCost * qtyOut)) : 0;
+
+      rec.onHand += qtyIn - qtyOut;
+      rec.totalCost += (valIn - valOut);
 
       const txnDate = row[idxTxnDate];
       if (txnDate && (!rec.lastDate || txnDate > rec.lastDate)) {
         rec.lastDate = txnDate;
-        rec.lastSrcType = row[idxSrcType];
-        rec.lastSrcId = row[idxSrcId];
+        rec.lastSrcType = row[idxSrcType] || '';
+        rec.lastSrcId = row[idxSrcId] || '';
       }
     });
 
-    // امسح القديم
+    // Clear old snapshot
     if (invSh.getLastRow() > 1) {
       invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
     }
 
-    const invHeaders = Object.keys(invMap).sort((a, b) => invMap[a] - invMap[b]);
+    const invHeaders = Object.keys(invMap).sort(function (a, b) { return invMap[a] - invMap[b]; });
     const rows = [];
 
-    Object.values(keyMap).forEach(r => {
-      const onHand = r.qtyIn - r.qtyOut;
-      if (!INV_SNAPSHOT_KEEP_ZERO && onHand <= 0) return;
+    Object.values(keyMap).forEach(function (r) {
+      if (Math.abs(r.onHand) < 1e-9) r.onHand = 0;
+      if (r.onHand === 0) r.totalCost = 0;
 
-      const avgCost = r.qtyIn ? r.totalCostIn / r.qtyIn : r.lastUnitCost;
-      const totalCost = avgCost * onHand;
+      if (!INV_SNAPSHOT_KEEP_ZERO && r.onHand === 0) return;
+
+      const avgCost = (r.onHand > 0) ? (r.totalCost / r.onHand) : 0;
 
       const rowObj = {
         'SKU': r.sku,
         'Product Name': r.product,
         'Variant / Color': r.variant,
         'Warehouse (EG)': r.warehouse,
-        'On Hand Qty': onHand,
+        'On Hand Qty': r.onHand,
         'Allocated Qty': 0,
-        'Available Qty': onHand,
+        'Available Qty': r.onHand,
         'Avg Cost (EGP)': avgCost,
-        'Total Cost (EGP)': totalCost,
+        'Total Cost (EGP)': r.totalCost,
         'Last Txn Date': r.lastDate,
         'Last Source Type': r.lastSrcType,
         'Last Source ID': r.lastSrcId
       };
 
-      const rowArr = invHeaders.map(h => rowObj[h] !== undefined ? rowObj[h] : '');
-      rows.push(rowArr);
+      rows.push(invHeaders.map(function (h) { return rowObj[h] !== undefined ? rowObj[h] : ''; }));
     });
 
     if (rows.length) {
