@@ -385,14 +385,21 @@ function updateShipmentsUaeEgStatusAndTotals(opts) {
       map['Qty'];
 
     const colShipCost = map[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
+      map['Ship Cost (EGP) – per unit'] ||
+      map['Ship Cost (EGP) - per unit'] ||
+      map['Ship Cost (EGP) – per unit or box'] ||
       map['Ship Cost (EGP) - per unit or box'] ||
       map['Ship Cost (EGP)'];
 
     const colCustoms = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
+      map['Customs (EGP) – per unit'] ||
+      map['Customs (EGP) - per unit'] ||
       map['Customs (EGP)'] ||
       map['Customs / Clearance (EGP)'];
 
     const colOther = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
+      map['Other (EGP) – per unit'] ||
+      map['Other (EGP) - per unit'] ||
       map['Other (EGP)'] ||
       map['Other Fees (EGP)'];
 
@@ -441,7 +448,8 @@ function updateShipmentsUaeEgStatusAndTotals(opts) {
       const customs = Number(row[idx.customs] || 0);
       const other = Number(row[idx.other] || 0);
 
-      const totalForShipment = (shipCostPerUnit * qty) + customs + other;
+      const extrasPerUnit = shipCostPerUnit + customs + other;
+      const totalForShipment = qty ? (qty * extrasPerUnit) : 0;
       row[idx.total] = totalForShipment;
 
       // ----- Status -----

@@ -181,9 +181,9 @@ const APP = {
       VARIANT: 'Variant / Color',
       QTY: 'Qty',
       QTY_SYNCED: 'Qty Synced',
-      SHIP_COST: 'Ship Cost (EGP) – per unit or box',
-      CUSTOMS: 'Customs (EGP)',
-      OTHER: 'Other (EGP)',
+      SHIP_COST: 'Ship Cost (EGP) – per unit',
+      CUSTOMS: 'Customs (EGP) – per unit',
+      OTHER: 'Other (EGP) – per unit',
       TOTAL_COST: 'Total Cost (EGP)',
       LINE_ID: 'Line ID',
       NOTES: 'Notes'
@@ -291,10 +291,16 @@ const APP = {
     'Variant/Color': 'Variant / Color',
     'Variant': 'Variant / Color',
 
-    // Dash variants / legacy headers
-    'Ship Cost (EGP) - per unit or box': 'Ship Cost (EGP) – per unit or box',
-    'Ship Cost (EGP) — per unit or box': 'Ship Cost (EGP) – per unit or box',
+    // Cost header variants
+    'Ship Cost (EGP) - per unit or box': 'Ship Cost (EGP) – per unit',
+    'Ship Cost (EGP) — per unit or box': 'Ship Cost (EGP) – per unit',
+    'Ship Cost (EGP) – per unit or box': 'Ship Cost (EGP) – per unit',
+    'Ship Cost (EGP) - per unit': 'Ship Cost (EGP) – per unit',
     'Ship Cost (EGP) — per unit': 'Ship Cost (EGP) – per unit',
+    'Customs (EGP)': 'Customs (EGP) – per unit',
+    'Customs / Clearance (EGP)': 'Customs (EGP) – per unit',
+    'Other (EGP)': 'Other (EGP) – per unit',
+    'Other Fees (EGP)': 'Other (EGP) – per unit',
     'Qty (pcs)': 'Qty',
     // Arabic common variants (status)
     'تم التسليم': 'Delivered',

@@ -1,0 +1,215 @@
+diff --git a/AppCore.js b/AppCore.js
+index 84013ad..c0ec6ff 100644
+--- a/AppCore.js
++++ b/AppCore.js
+@@ -167,10 +167,10 @@ const APP = {
+     },
+
+     SHIP_UAE_EG: {
+-      SHIP_COST: 'Ship Cost (EGP) – per unit or box',
+-      CUSTOMS: 'Customs (EGP)',
+-      OTHER: 'Other (EGP)',
++      SHIP_COST: 'Ship Cost (EGP) – per unit',
++      CUSTOMS: 'Customs (EGP) – per unit',
++      OTHER: 'Other (EGP) – per unit',
+       TOTAL_COST: 'Total Cost (EGP)',
+       LINE_ID: 'Line ID',
+       NOTES: 'Notes',
+@@ -289,9 +289,13 @@ const APP = {
+     'Qty Original': 'Qty',
+
+     // Cost header variants
+-    'Ship Cost (EGP) - per unit or box': 'Ship Cost (EGP) – per unit or box',
+-    'Ship Cost (EGP) — per unit or box': 'Ship Cost (EGP) – per unit or box',
++    'Ship Cost (EGP) - per unit or box': 'Ship Cost (EGP) – per unit',
++    'Ship Cost (EGP) — per unit or box': 'Ship Cost (EGP) – per unit',
++    'Ship Cost (EGP) – per unit or box': 'Ship Cost (EGP) – per unit',
+     'Ship Cost (EGP) - per unit': 'Ship Cost (EGP) – per unit',
+     'Ship Cost (EGP) — per unit': 'Ship Cost (EGP) – per unit',
++    'Customs (EGP)': 'Customs (EGP) – per unit',
++    'Customs / Clearance (EGP)': 'Customs (EGP) – per unit',
++    'Other (EGP)': 'Other (EGP) – per unit',
++    'Other Fees (EGP)': 'Other (EGP) – per unit',
+   },
+
+   // ====== Default formatting ======
+diff --git a/ShipmentsCore.js b/ShipmentsCore.js
+index 6fda2ed..6fb3c52 100644
+--- a/ShipmentsCore.js
++++ b/ShipmentsCore.js
+@@ -352,7 +352,7 @@ function updateShipmentsUaeEgStatusAndTotals() {
+   const lastCol = shipSh.getLastColumn();
+
+-  // Compute total cost: Total Cost = Qty * Ship Cost + Customs + Other
++  // Compute total cost: Total Cost = Qty * (Ship Cost + Customs + Other)  [ALL PER-UNIT inputs]
+   const colShipCost = map[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
+-    map['Ship Cost (EGP) - per unit or box'] ||
++    map['Ship Cost (EGP) – per unit'] ||
++    map['Ship Cost (EGP) - per unit'] ||
++    map['Ship Cost (EGP) – per unit or box'] ||
++    map['Ship Cost (EGP) - per unit or box'] ||
+     map['Ship Cost (EGP)'];
+   const colCustoms = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
++    map['Customs (EGP) – per unit'] ||
++    map['Customs (EGP) - per unit'] ||
+     map['Customs (EGP)'] ||
+     map['Customs / Clearance (EGP)'];
+   const colOther = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
++    map['Other (EGP) – per unit'] ||
++    map['Other (EGP) - per unit'] ||
+     map['Other (EGP)'] ||
+     map['Other Fees (EGP)'];
+
+@@ -390,11 +390,12 @@ function updateShipmentsUaeEgStatusAndTotals() {
+       const shipCostPerUnit = Number(row[idxShipCost] || 0);
+       const customs = Number(row[idxCustoms] || 0);
+       const other = Number(row[idxOther] || 0);
+       const qty = Number(row[idxQty] || 0);
+
+-      const totalForShipment = (shipCostPerUnit * qty) + customs + other;
++      const extrasPerUnit = shipCostPerUnit + customs + other;
++      const totalForShipment = qty ? (qty * extrasPerUnit) : 0;
+       row[idx.total] = totalForShipment;
+
+       const status = row[idxStatus];
+       const shipDate = row[idxShipDate];
+@@ -1176,13 +1177,20 @@ function _updateShipmentUaeEgRowTotalsAndStatus_(shipSh, rowNum, map) {
+   const colLineId = map[APP.COLS.SHIP_UAE_EG.LINE_ID] || map['Line ID'];
+   const colStatus = map[APP.COLS.SHIP_UAE_EG.STATUS] || map['Status'];
+   const colShipCost = map[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
++    map['Ship Cost (EGP) – per unit'] ||
++    map['Ship Cost (EGP) - per unit'] ||
++    map['Ship Cost (EGP) – per unit or box'] ||
+     map['Ship Cost (EGP) - per unit or box'] ||
+     map['Ship Cost (EGP)'];
+   const colCustoms = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
++    map['Customs (EGP) – per unit'] ||
++    map['Customs (EGP) - per unit'] ||
+     map['Customs (EGP)'] ||
+     map['Customs / Clearance (EGP)'];
+   const colOther = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
++    map['Other (EGP) – per unit'] ||
++    map['Other (EGP) - per unit'] ||
+     map['Other (EGP)'] ||
+     map['Other Fees (EGP)'];
+   const colTotal = map[APP.COLS.SHIP_UAE_EG.TOTAL_COST] || map['Total Cost (EGP)'];
+@@ -1217,8 +1225,9 @@ function _updateShipmentUaeEgRowTotalsAndStatus_(shipSh, rowNum, map) {
+   const other = colOther ? Number(row[colOther - 1] || 0) : 0;
+
+   if (colTotal) {
+     const extrasPerUnit = shipCost + customs + other;
+-    const totalShipment = (shipCost * qty) + customs + other;
++    const totalShipment = qty ? (qty * extrasPerUnit) : 0;
+     row[colTotal - 1] = totalShipment;
+   }
+
+@@ -1309,11 +1318,17 @@ function shipmentsUaeEgOnEdit_(e) {
+       const colShipCost =
+         shipMap[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
++        shipMap['Ship Cost (EGP) – per unit'] ||
++        shipMap['Ship Cost (EGP) - per unit'] ||
++        shipMap['Ship Cost (EGP) – per unit or box'] ||
+         shipMap['Ship Cost (EGP) - per unit or box'] ||
+         shipMap['Ship Cost (EGP)'];
+       const colCustoms =
+         shipMap[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
++        shipMap['Customs (EGP) – per unit'] ||
++        shipMap['Customs (EGP) - per unit'] ||
+         shipMap['Customs (EGP)'] ||
+         shipMap['Customs / Clearance (EGP)'];
+       const colOther =
+         shipMap[APP.COLS.SHIP_UAE_EG.OTHER] ||
++        shipMap['Other (EGP) – per unit'] ||
++        shipMap['Other (EGP) - per unit'] ||
+         shipMap['Other (EGP)'] ||
+         shipMap['Other Fees (EGP)'];
+       const colTotal =
+@@ -2246,13 +2262,20 @@ function syncShipmentsUaeEgToInventory() {
+       // ===== Cost columns (per agreed policy) =====
+       const colShipCost =
+         shipMap[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
++        shipMap['Ship Cost (EGP) – per unit'] ||
++        shipMap['Ship Cost (EGP) - per unit'] ||
++        shipMap['Ship Cost (EGP) – per unit or box'] ||
+         shipMap['Ship Cost (EGP) - per unit or box'] ||
+         shipMap['Ship Cost (EGP)'];
+       const colCustoms = shipMap[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
++        shipMap['Customs (EGP) – per unit'] ||
++        shipMap['Customs (EGP) - per unit'] ||
+         shipMap['Customs (EGP)'] ||
+         shipMap['Customs / Clearance (EGP)'];
+       const colOther = shipMap[APP.COLS.SHIP_UAE_EG.OTHER] ||
++        shipMap['Other (EGP) – per unit'] ||
++        shipMap['Other (EGP) - per unit'] ||
+         shipMap['Other (EGP)'] ||
+         shipMap['Other Fees (EGP)'];
+       const colTotal = shipMap[APP.COLS.SHIP_UAE_EG.TOTAL_COST] || shipMap['Total Cost (EGP)'];
+@@ -2499,7 +2535,8 @@ function syncShipmentsUaeEgToInventory() {
+         // Determine base cost from current UAE snapshot (avg cost), then add extras.
+         const basis = (useWarehouse ? invUaeMap[invKey] : invUaeSkuMap[skuKey]) || {};
+-        const baseCost = Number(basis.avgCost || 0);        // ===== Extras policy (PER-UNIT inputs) + freeze across partial deltas =====
++        const baseCost = Number(basis.avgCost || 0);
++
++        // ===== Extras policy (PER-UNIT inputs) + freeze across partial deltas =====
+         const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
+-        const customsTotal = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
+-        const otherTotal = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
+-
+-        // Enforce sheet Total Cost if present (line total), consistent with agreed policy.
+-        if (idxShipTotal != null) {
+-          row[idxShipTotal] = qtyOriginal ? (qtyOriginal * extrasPerUnit) : 0;
+-        }
+-
+-        let extrasPerUnit = shipCostPerUnit + (qtyOriginal ? (customsTotal + otherTotal) / qtyOriginal : 0);
+-
+-        // Freeze extrasPerUnit once first delta posts: derive baseline from ledger (IN unit - OUT unit).
+-        const baseline = baselineExtraPUByLineKey[stableLineKey];
+-        if (baseline != null && isFinite(baseline)) {
+-          if (Math.abs(extrasPerUnit - baseline) > TOL) {
+-            logError_('syncShipmentsUaeEgToInventory.extraPerUnitMismatch', new Error('SUEG extrasPerUnit differs from ledger baseline; using baseline.'), {
+-              shipmentId: shipmentId,
+-              sku: sku,
+-              stableLineKey: stableLineKey,
+-              computed: extrasPerUnit,
+-              baseline: baseline,
+-              shipCostPerUnit: shipCostPerUnit,
+-              customsTotal: customsTotal,
+-              otherTotal: otherTotal,
+-              qtyOriginal: qtyOriginal,
+-              delta: delta
+-            });
+-          }
+-          extrasPerUnit = baseline;
+-        }
++        const customsPerUnit = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
++        const otherPerUnit = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
++
++        let extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
++
++        // Freeze extrasPerUnit across partial deltas based on first-posted baseline in ledger.
++        const baseline = baselineExtraPUByLineKey[stableLineKey];
++        if (baseline != null && isFinite(baseline)) {
++          const tol = (typeof INV_COST_TOLERANCE_EGP === 'number') ? INV_COST_TOLERANCE_EGP : 0.05;
++          if (Math.abs(extrasPerUnit - baseline) > tol) {
++            logError_('syncShipmentsUaeEgToInventory.extraPerUnitMismatch', new Error('SUEG extrasPerUnit differs from ledger baseline; using baseline.'), {
++              shipmentId: shipmentId,
++              sku: sku,
++              stableLineKey: stableLineKey,
++              computed: extrasPerUnit,
++              baseline: baseline,
++              shipCostPerUnit: shipCostPerUnit,
++              customsPerUnit: customsPerUnit,
++              otherPerUnit: otherPerUnit,
++              qtyOriginal: qtyOriginal,
++              delta: delta
++            });
++          }
++          extrasPerUnit = baseline;
++        }
++
++        // Enforce sheet Total Cost as line total (qtyOriginal * extrasPerUnit).
++        if (idxShipTotal != null) {
++          row[idxShipTotal] = qtyOriginal ? (qtyOriginal * extrasPerUnit) : 0;
++        }
+
+         const landedCost = baseCost + extrasPerUnit;

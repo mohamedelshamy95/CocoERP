@@ -1,0 +1,319 @@
+--- a/ShipmentsCore.js
++++ b/ShipmentsCore.js
+@@ -2364,13 +2364,19 @@
+-        // Total extras (ship/customs/other) per unit (for landed cost)
+-        const shipCost = idxShipShipCost != null ? Number(row[idxShipShipCost] || 0) : 0;
+-        const customs = idxShipCustoms != null ? Number(row[idxShipCustoms] || 0) : 0;
+-        const other = idxShipOther != null ? Number(row[idxShipOther] || 0) : 0;
+-        const totalExtras = (idxShipTotal != null)
+-          ? Number(row[idxShipTotal] || (shipCost + customs + other))
+-          : (shipCost + customs + other);
++        // Cost policy (enforced):
++        //  - Ship Cost is PER UNIT (EGP).
++        //  - Customs / Other are LINE TOTAL amounts (EGP) allocated over the original line qty.
++        //    ExtraPerUnit = ShipCostPerUnit + (Customs+Other)/QtyLineOriginal
++        const shipCostPerUnit = idxShipShipCost != null ? Number(row[idxShipShipCost] || 0) : 0;
++        const customs = idxShipCustoms != null ? Number(row[idxShipCustoms] || 0) : 0;
++        const other = idxShipOther != null ? Number(row[idxShipOther] || 0) : 0;
++
++        const totalExtrasLine = (shipCostPerUnit * qtyCurrent) + customs + other;
++        if (idxShipTotal != null) {
++          row[idxShipTotal] = totalExtrasLine;
++        }
++
++        const extrasPerUnit = qtyCurrent > 0 ? (shipCostPerUnit + ((customs + other) / qtyCurrent)) : 0;
+
+--- a/InventoryCore.js
++++ b/InventoryCore.js
+@@ -1,3 +1,210 @@
++function rebuildInventoryUAEFromLedger() {
++  try {
++    const ledgerSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS);
++    const invSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_UAE) : getSheet_(APP.SHEETS.INVENTORY_UAE);
++
++    // Self-heal common ledger header drift (Warehouse duplicates)
++    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
++
++    const ledgerMap = getHeaderMap_(ledgerSh);
++    const invMap = getHeaderMap_(invSh);
++
++    const lastRow = ledgerSh.getLastRow();
++
++    // No ledger rows → clear snapshot
++    if (lastRow < 2) {
++      if (invSh.getLastRow() > 1) {
++        invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
++      }
++      return;
++    }
++
++    const data = ledgerSh.getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn()).getValues();
++
++    const idxSku = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
++    const idxWh = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
++    const idxProduct = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
++    const idxVariant = ledgerMap[APP.COLS.INV_TXNS.VARIANT] - 1;
++    const idxQtyIn = ledgerMap[APP.COLS.INV_TXNS.QTY_IN] - 1;
++    const idxQtyOut = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
++    const idxUnitCost = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] - 1;
++    const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] - 1;
++    const idxTxnDate = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] - 1;
++    const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
++    const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
++
++    // Aggregate by (SKU + Warehouse + Variant) for UAE warehouses only.
++    const keyMap = {};
++    const COST_TOL = 0.01;
++
++    data.forEach(function (row) {
++      const sku = row[idxSku];
++      if (!sku) return;
++
++      const whRaw = row[idxWh];
++      const wh = (whRaw || '').toString().trim();
++      if (!wh) return;
++      if (!_inv_isUaeWarehouse_(wh)) return;
++
++      const qtyIn = Number(row[idxQtyIn] || 0);
++      const qtyOut = Number(row[idxQtyOut] || 0);
++      if (qtyIn === 0 && qtyOut === 0) return;
++
++      const product = row[idxProduct];
++      const variant = row[idxVariant];
++      const unitCost = Number(row[idxUnitCost] || 0);
++      const totalCostRaw = Number(row[idxTotalCost] || 0);
++      const txnDate = row[idxTxnDate];
++      const srcType = row[idxSrcType];
++      const srcId = row[idxSrcId];
++
++      // Signed value: IN adds; OUT subtracts (moving-average).
++      let signedValue = 0;
++      if (qtyIn > 0) {
++        signedValue = totalCostRaw || (unitCost * qtyIn);
++      } else if (qtyOut > 0) {
++        signedValue = -(totalCostRaw || (unitCost * qtyOut));
++      }
++
++      const key = sku + '||' + wh + '||' + (variant || '');
++
++      if (!keyMap[key]) {
++        keyMap[key] = {
++          sku: sku,
++          product: product,
++          variant: variant,
++          warehouse: wh,
++          onHand: 0,
++          totalCost: 0,
++          lastDate: txnDate || null,
++          lastSourceType: srcType || '',
++          lastSourceId: srcId || ''
++        };
++      }
++
++      const rec = keyMap[key];
++      rec.onHand += (qtyIn - qtyOut);
++      rec.totalCost += signedValue;
++
++      if (txnDate && (!rec.lastDate || txnDate > rec.lastDate)) {
++        rec.lastDate = txnDate;
++        rec.lastSourceType = srcType || '';
++        rec.lastSourceId = srcId || '';
++      }
++    });
++
++    // Clear old snapshot
++    if (invSh.getLastRow() > 1) {
++      invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
++    }
++
++    const invHeaders = Object.keys(invMap).sort(function (a, b) { return invMap[a] - invMap[b]; });
++    const rows = [];
++
++    Object.keys(keyMap).forEach(function (key) {
++      const r = keyMap[key];
++
++      // Normalize tiny drift
++      if (Math.abs(r.onHand) < 1e-9) r.onHand = 0;
++      if (r.onHand === 0) {
++        if (Math.abs(r.totalCost) > COST_TOL) {
++          // Preserve determinism: log but clamp snapshot value to 0 (moving-average rule)
++          try {
++            logError_('rebuildInventoryUAEFromLedger.valueNotZeroWhenQtyZero', new Error('OnHand=0 but TotalCost!=0'), { sku: r.sku, warehouse: r.warehouse, variant: r.variant, totalCost: r.totalCost });
++          } catch (e) { }
++        }
++        r.totalCost = 0;
++      }
++
++      if (!INV_SNAPSHOT_KEEP_ZERO && r.onHand === 0 && r.totalCost === 0) return;
++
++      const avgCost = r.onHand ? (r.totalCost / r.onHand) : 0;
++
++      const rowObj = {};
++      rowObj['SKU'] = r.sku;
++      rowObj['Product Name'] = r.product;
++      rowObj['Variant / Color'] = r.variant;
++      rowObj['Warehouse (UAE)'] = r.warehouse;
++      rowObj['On Hand Qty'] = r.onHand;
++      rowObj['Allocated Qty'] = 0;
++      rowObj['Available Qty'] = r.onHand;
++      rowObj['Avg Cost (EGP)'] = avgCost;
++      rowObj['Total Cost (EGP)'] = r.totalCost;
++      rowObj['Last Txn Date'] = r.lastDate;
++      rowObj['Last Source Type'] = r.lastSourceType;
++      rowObj['Last Source ID'] = r.lastSourceId;
++
++      rows.push(invHeaders.map(function (h) {
++        return rowObj[h] !== undefined ? rowObj[h] : '';
++      }));
++    });
++
++    if (rows.length) {
++      invSh.getRange(2, 1, rows.length, invSh.getLastColumn()).setValues(rows);
++    }
++
++  } catch (e) {
++    logError_('rebuildInventoryUAEFromLedger', e);
++    throw e;
++  }
++}
++
++function rebuildInventoryEGFromLedger() {
++  try {
++    const ledgerSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS);
++    const invSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_EG) : getSheet_(APP.SHEETS.INVENTORY_EG);
++
++    // Self-heal common ledger header drift (Warehouse duplicates)
++    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
++
++    const ledgerMap = getHeaderMap_(ledgerSh);
++    const invMap = getHeaderMap_(invSh);
++
++    const lastRow = ledgerSh.getLastRow();
++    if (lastRow < 2) {
++      if (invSh.getLastRow() > 1) {
++        invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
++      }
++      return;
++    }
++
++    const data = ledgerSh.getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn()).getValues();
++
++    const idxSku = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
++    const idxWh = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
++    const idxProd = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
++    const idxVar = ledgerMap[APP.COLS.INV_TXNS.VARIANT] - 1;
++    const idxQtyIn = ledgerMap[APP.COLS.INV_TXNS.QTY_IN] - 1;
++    const idxQtyOut = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
++    const idxUnitCost = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] - 1;
++    const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] - 1;
++    const idxTxnDate = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] - 1;
++    const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
++    const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
++
++    const keyMap = {};
++    const COST_TOL = 0.01;
++
++    data.forEach(function (row) {
++      const whRaw = (row[idxWh] || '').toString().trim();
++      const whUpper = whRaw.toUpperCase();
++      if (!_inv_isEgWarehouse_(whUpper)) return;
++
++      const qtyIn = Number(row[idxQtyIn] || 0);
++      const qtyOut = Number(row[idxQtyOut] || 0);
++      if (qtyIn === 0 && qtyOut === 0) return;
++
++      const sku = row[idxSku];
++      if (!sku) return;
++
++      const variant = row[idxVar] || '';
++      const key = sku + '||' + whUpper + '||' + variant;
++
++      if (!keyMap[key]) {
++        keyMap[key] = {
++          sku: sku,
++          product: row[idxProd],
++          variant: variant,
++          warehouse: whUpper,
++          onHand: 0,
++          totalCost: 0,
++          lastDate: null,
++          lastSrcType: '',
++          lastSrcId: ''
++        };
++      }
++
++      const unitCost = Number(row[idxUnitCost] || 0);
++      const totalCostRaw = Number(row[idxTotalCost] || 0);
++
++      let signedValue = 0;
++      if (qtyIn > 0) {
++        signedValue = totalCostRaw || (unitCost * qtyIn);
++      } else if (qtyOut > 0) {
++        signedValue = -(totalCostRaw || (unitCost * qtyOut));
++      }
++
++      const rec = keyMap[key];
++      rec.onHand += (qtyIn - qtyOut);
++      rec.totalCost += signedValue;
++
++      const txnDate = row[idxTxnDate];
++      if (txnDate && (!rec.lastDate || txnDate > rec.lastDate)) {
++        rec.lastDate = txnDate;
++        rec.lastSrcType = row[idxSrcType];
++        rec.lastSrcId = row[idxSrcId];
++      }
++    });
++
++    // Clear old snapshot
++    if (invSh.getLastRow() > 1) {
++      invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
++    }
++
++    const invHeaders = Object.keys(invMap).sort(function (a, b) { return invMap[a] - invMap[b]; });
++    const rows = [];
++
++    Object.keys(keyMap).forEach(function (key) {
++      const r = keyMap[key];
++
++      if (Math.abs(r.onHand) < 1e-9) r.onHand = 0;
++      if (r.onHand === 0) {
++        if (Math.abs(r.totalCost) > COST_TOL) {
++          try {
++            logError_('rebuildInventoryEGFromLedger.valueNotZeroWhenQtyZero', new Error('OnHand=0 but TotalCost!=0'), { sku: r.sku, warehouse: r.warehouse, variant: r.variant, totalCost: r.totalCost });
++          } catch (e) { }
++        }
++        r.totalCost = 0;
++      }
++
++      if (!INV_SNAPSHOT_KEEP_ZERO && r.onHand <= 0) return;
++
++      const avgCost = r.onHand ? (r.totalCost / r.onHand) : 0;
++
++      const rowObj = {
++        'SKU': r.sku,
++        'Product Name': r.product,
++        'Variant / Color': r.variant,
++        'Warehouse (EG)': r.warehouse,
++        'On Hand Qty': r.onHand,
++        'Allocated Qty': 0,
++        'Available Qty': r.onHand,
++        'Avg Cost (EGP)': avgCost,
++        'Total Cost (EGP)': r.totalCost,
++        'Last Txn Date': r.lastDate,
++        'Last Source Type': r.lastSrcType,
++        'Last Source ID': r.lastSrcId
++      };
++
++      rows.push(invHeaders.map(function (h) {
++        return rowObj[h] !== undefined ? rowObj[h] : '';
++      }));
++    });
++
++    if (rows.length) {
++      invSh.getRange(2, 1, rows.length, invSh.getLastColumn()).setValues(rows);
++    }
++  } catch (e) {
++    logError_('rebuildInventoryEGFromLedger', e);
++    throw e;
++  }
++}
