@@ -1235,7 +1235,7 @@ function _updateShipmentUaeEgRowTotalsAndStatus_(sh, rowIndex, headerMapOpt) {
   // ----- Status -----
   const ship = colShipDate ? row[colShipDate - 1] : '';
   const eta = colEta ? row[colEta - 1] : '';
-  const arr = colArr ? row[colArr - 1] : '';
+  const arr = colArrival ? row[colArrival - 1] : '';
 
   let status = '';
 
@@ -2434,12 +2434,18 @@ function syncShipmentsUaeEgToInventory() {
         // NOTE: Keep legacy discriminator format for backward compatibility (existing ledger keys).
         const lineDiscriminator = boxId ? ('B' + boxId) : ('L' + lineId);
 
-        const stableLineKey = `SUEG|${shipmentId}|${lineDiscriminator}|${sku}|${vKey}`;
+        // Stable key MUST match parseStableLineKey_(sid) from ledger scan:
+        // sid format: SUEG|shipmentId|lineDiscriminator|sku|vKey|S..|D..|IN/OUT
+        // parse removes |IN/OUT and |S..|D.. => leaves: SUEG|shipmentId|lineDiscriminator|sku|vKey
+        const stableKeyRaw = `SUEG|${shipmentId}|${lineDiscriminator}|${sku}|${vKey}`;
 
-        // Operation key encodes the pre-sync Qty Synced and the delta, so retries don't duplicate.
-        const baseKey = `${stableLineKey}|S${qtySynced}|D${delta}`;
+        // Operation key for this delta (used to build Source IDs)
+        const baseKey = `${stableKeyRaw}|S${qtySynced}|D${delta}`;
         const sourceIdOut = `${baseKey}|OUT`;
         const sourceIdIn = `${baseKey}|IN`;
+
+        // Baseline lookup uses the stable key (NOT the delta key)
+        const baselineObj = extraPUByStableKey[stableKeyRaw];
 
         let outExists = existingSourceIds.has(sourceIdOut);
         let inExists = existingSourceIds.has(sourceIdIn);
