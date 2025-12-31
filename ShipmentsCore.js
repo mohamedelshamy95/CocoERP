@@ -694,8 +694,16 @@ function syncPurchasesToShipmentsCnUae() {
       rowObj['Total Cost (AED)'] = '';
 
       rowObj['Notes'] = 'Auto (line-level) from Purchases';
+      rowObj['Purchases Line ID'] = lineId;
 
-      const outRow = shipHeaders.map(function (h) {
+      if (qcWarehouseHeader) {
+        const existingWarehouse = rowObj[qcWarehouseHeader];
+        if (!existingWarehouse || !String(existingWarehouse).trim()) {
+          rowObj[qcWarehouseHeader] = defaultQcWarehouse;
+        }
+      }
+
+      const outRow = qcHeaders.map(function (h) {
         return (rowObj[h] !== undefined) ? rowObj[h] : '';
       });
       newRows.push(outRow);
@@ -1192,7 +1200,7 @@ function _updateShipmentUaeEgRowTotalsAndStatus_(sh, rowIndex, headerMapOpt) {
   const colQty = map[APP.COLS.SHIP_UAE_EG.QTY] ||
     map['Qty'];
   const colShipCost = map[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
-    map['Ship Cost (EGP) - per unit or box'] ||
+    map['Ship Cost (EGP) - per unit or per box'] ||
     map['Ship Cost (EGP)'];
   const colCustoms = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
     map['Customs (EGP)'] ||
@@ -1317,7 +1325,7 @@ function shipmentsUaeEgOnEdit_(e) {
     const colQty = map[APP.COLS.SHIP_UAE_EG.QTY] ||
       map['Qty'];
     const colShipCost = map[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
-      map['Ship Cost (EGP) - per unit or box'] ||
+      map['Ship Cost (EGP) - per unit or per box'] ||
       map['Ship Cost (EGP)'];
     const colCustoms = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
       map['Customs (EGP)'] ||
@@ -1657,10 +1665,16 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       rowObj['Notes'] = 'Auto (line-level) from Purchases';
       rowObj['Purchases Line ID'] = lineId;
 
+      if (qcWarehouseHeader) {
+        const existingWarehouse = rowObj[qcWarehouseHeader];
+        if (!existingWarehouse || !String(existingWarehouse).trim()) {
+          rowObj[qcWarehouseHeader] = defaultQcWarehouse;
+        }
+      }
+
       const outRow = qcHeaders.map(function (h) {
         return (rowObj[h] !== undefined) ? rowObj[h] : '';
       });
-
       newRowsFull.push(outRow);
     });
 
@@ -1967,10 +1981,40 @@ function syncQCtoInventory_UAE(opts) {
     const purchMap = getHeaderMap_(purchSh);
     const ledgerMap = getHeaderMap_(ledgerSh);
 
+    const defaultQcWarehouseRaw = 'UAE-DXB';
+    const defaultQcWarehouse = (typeof normalizeWarehouseCode_ === 'function')
+      ? normalizeWarehouseCode_(defaultQcWarehouseRaw)
+      : defaultQcWarehouseRaw;
+
+    const qcColWh = qcMap[APP.COLS.QC_UAE.WAREHOUSE] || qcMap['Warehouse (UAE)'];
+    if (!qcColWh) {
+      logError_('syncQCtoInventory_UAE.missingWarehouseColumn', new Error('Missing Warehouse (UAE) column in QC_UAE'));
+      return;
+    }
+
     const lastQcRow = qcSh.getLastRow();
     if (lastQcRow < 2) return; // مفيش بيانات
 
     const qcData = qcSh.getRange(2, 1, lastQcRow - 1, qcSh.getLastColumn()).getValues();
+    const qcWhValues = new Array(qcData.length);
+    let qcWhChanged = false;
+
+    for (let i = 0; i < qcData.length; i++) {
+      const row = qcData[i];
+      const currentCell = row[qcColWh - 1];
+      const currentWh = (currentCell || '').toString().trim();
+      if (currentWh) {
+        qcWhValues[i] = [currentCell];
+        continue;
+      }
+      row[qcColWh - 1] = defaultQcWarehouse;
+      qcWhValues[i] = [defaultQcWarehouse];
+      qcWhChanged = true;
+    }
+
+    if (qcWhChanged && qcWhValues.length) {
+      qcSh.getRange(2, qcColWh, qcWhValues.length, 1).setValues(qcWhValues);
+    }
 
     const qcIdCol = qcMap[APP.COLS.QC_UAE.QC_ID] || qcMap['QC ID'];
     const qcDateCol = qcMap[APP.COLS.QC_UAE.QC_DATE] || qcMap['QC Date'];
@@ -2103,7 +2147,7 @@ function syncQCtoInventory_UAE(opts) {
 
       const product = row[qcMap['Product Name'] - 1] || '';
       const variant = row[qcMap['Variant / Color'] - 1] || '';
-      const warehouseRaw = (row[qcMap[APP.COLS.QC_UAE.WAREHOUSE] - 1] || '').toString().trim();
+      const warehouseRaw = (row[qcColWh - 1] || '').toString().trim();
       const warehouse = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(warehouseRaw) : warehouseRaw;
       if (!warehouse) {
         logError_('syncQCtoInventory_UAE', new Error('Missing Warehouse (UAE) in QC_UAE'), { qcId: qcId, qcRow: (2 + idx) });
@@ -2258,8 +2302,8 @@ function syncShipmentsUaeEgToInventory() {
       // ===== Cost columns (per agreed policy) =====
       const colShipCost =
         shipMap[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
-        shipMap['Ship Cost (EGP) – per unit or box'] ||
-        shipMap['Ship Cost (EGP) - per unit or box'] ||
+        shipMap['Ship Cost (EGP) – per unit or per box'] ||
+        shipMap['Ship Cost (EGP) - per unit or per box'] ||
         shipMap['Ship Cost (EGP)'];
 
       const colCustoms = shipMap[APP.COLS.SHIP_UAE_EG.CUSTOMS] || shipMap['Customs (EGP)'];
@@ -2445,7 +2489,7 @@ function syncShipmentsUaeEgToInventory() {
         const sourceIdIn = `${baseKey}|IN`;
 
         // Baseline lookup uses the stable key (NOT the delta key)
-        const baselineObj = extraPUByStableKey[stableKeyRaw];
+        // (removed extraPUByStableKey reference; see baselineExtraPUByLineKey below)
 
         let outExists = existingSourceIds.has(sourceIdOut);
         let inExists = existingSourceIds.has(sourceIdIn);
@@ -2519,67 +2563,58 @@ function syncShipmentsUaeEgToInventory() {
 
         const baseCost = Number(basis.avgCost || 0);
 
-        // ===== Extras policy (per-unit ship + allocated totals) + freeze across partial deltas =====
+        // ===== Extras policy (PER-UNIT inputs) + freeze across partial deltas =====
         const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
-        const customsTotal = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
-        const otherTotal = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
+        const customsPerUnit = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
+        const otherPerUnit = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
 
-        // Enforce sheet Total Cost = Qty * shipCostPerUnit + customsTotal + otherTotal (if column exists)
-        if (idxShipTotal != null) {
-          row[idxShipTotal] = (qtyOriginal * shipCostPerUnit) + customsTotal + otherTotal;
-        }
-
-        let extrasPerUnit = shipCostPerUnit + ((customsTotal + otherTotal) / qtyOriginal);
-
-        const baseline = baselineExtraPUByLineKey[stableLineKey];
-        if (baseline != null && !isNaN(Number(baseline))) {
-          const b = Number(baseline);
-          if (Math.abs(extrasPerUnit - b) > TOL) {
+        let extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
+        let baseline = baselineExtraPUByLineKey[stableKeyRaw];
+        if (baseline != null && isFinite(baseline)) {
+          if (Math.abs(extrasPerUnit - baseline) > TOL) {
             logError_(
               'syncShipmentsUaeEgToInventory.extrasBaselineMismatch',
               new Error('Extras-per-unit mismatch vs ledger baseline; using baseline to keep deltas consistent.'),
               {
-                stableLineKey: stableLineKey,
+                stableKeyRaw: stableKeyRaw,
                 shipmentId: shipmentId,
                 sku: sku,
                 fromSheet: extrasPerUnit,
-                baseline: b,
+                baseline: baseline,
                 qtyOriginal: qtyOriginal,
                 shipCostPerUnit: shipCostPerUnit,
-                customsTotal: customsTotal,
-                otherTotal: otherTotal
+                customsPerUnit: customsPerUnit,
+                otherPerUnit: otherPerUnit
               }
             );
           }
-          extrasPerUnit = b;
+          extrasPerUnit = baseline;
+        } else {
+          // Set baseline for this run if not present
+          baselineExtraPUByLineKey[stableKeyRaw] = extrasPerUnit;
         }
 
+        // Set Total Cost column for visibility (qtyOriginal * extrasPerUnit_used)
+        if (idxShipTotal != null) {
+          row[idxShipTotal] = qtyOriginal * extrasPerUnit;
+        }
+
+        // Populate locals used by txns to avoid ReferenceError (deterministic & minimal)
         const landedCost = baseCost + extrasPerUnit;
 
-        // Fill Product / Variant if missing
-        if (idxShipProdName != null && !row[idxShipProdName] && info.product) {
-          row[idxShipProdName] = info.product;
-        }
-        if (idxShipVariant != null && !row[idxShipVariant] && info.variant) {
-          row[idxShipVariant] = info.variant;
-        }
+        const batchCode = (info && info.lastSourceId)
+          ? (String(info.lastSourceId) + '||' + String(sku))
+          : (String(shipmentId) + '||' + String(sku));
 
-        // Batch Code: prefer inventory last source id
-        const batchCode = info.lastSourceId
-          ? String(info.lastSourceId) + '||' + String(sku)
-          : String(shipmentId) + '||' + String(sku);
+        const productName = (info && (info.productName || info.product)) ||
+          (idxShipProdName != null ? row[idxShipProdName] : '') || '';
 
-        const productName =
-          (info && (info.productName || info.product)) ||
-          (idxShipProdName != null ? row[idxShipProdName] : '') ||
-          '';
+        const variant = (info && info.variant) ||
+          (idxShipVariant != null ? row[idxShipVariant] : '') || '';
 
-        const variant =
-          (info && info.variant) ||
-          (idxShipVariant != null ? row[idxShipVariant] : '') ||
-          '';
-
-        const toWarehouseRaw = (APP.WAREHOUSES && APP.WAREHOUSES.TAN_GH) ? APP.WAREHOUSES.TAN_GH : 'TAN-GH';
+        const toWarehouseRaw = (APP.WAREHOUSES && APP.WAREHOUSES.TAN_GH)
+          ? APP.WAREHOUSES.TAN_GH
+          : 'TAN-GH';
         const toWarehouse = normWh_(toWarehouseRaw);
 
         // Txn-ID based dedupe (covers legacy Source ID scheme and prevents duplicates across code revisions)
@@ -2883,16 +2918,16 @@ function _sueg_buildUaeEgExtrasBaselineFromLedger_(ledgerSh, ledgerMap, tol) {
     if (st !== 'SHIP_UAE_EG') continue;
 
     const sid = String(r[idxSourceId] || '').trim();
-    if (!sid || sid.indexOf('SUEG|') !== 0) continue;
+    if (sid && sid.indexOf('SUEG|') === 0) {
+      const kind = /\|IN\s*$/i.test(sid) ? 'IN' : (/\|OUT\s*$/i.test(sid) ? 'OUT' : '');
+      if (kind) {
+        const base = _sueg_baseKeyNoType_(sid);
+        if (!pair[base]) pair[base] = { IN: null, OUT: null };
 
-    const kind = /\|IN\s*$/i.test(sid) ? 'IN' : (/\|OUT\s*$/i.test(sid) ? 'OUT' : '');
-    if (!kind) continue;
-
-    const base = _sueg_baseKeyNoType_(sid);
-    if (!pair[base]) pair[base] = { IN: null, OUT: null };
-
-    const u = Number(r[idxUnitCost] || 0);
-    pair[base][kind] = u;
+        const u = Number(r[idxUnitCost] || 0);
+        pair[base][kind] = u;
+      }
+    }
   }
 
   for (const base of Object.keys(pair)) {
