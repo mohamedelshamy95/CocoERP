@@ -1039,6 +1039,7 @@ function onOpen(e) {
         .addItem('Setup Inventory Core Layout', 'setupInventoryCoreLayout')
         .addItem('Rebuild Inventory Snapshots', 'inv_rebuildAllSnapshots')
         .addSeparator()
+        // Only add actions if handlers exist (prevents "Function not found" runtime errors)
         .addItem('Sync QC → Inventory (UAE)', 'syncQCtoInventory_UAE')
         .addItem('Sync Shipments UAE→EG', 'syncShipmentsUaeEgToInventory')
         .addSeparator()
@@ -1767,32 +1768,38 @@ function coco_processSyncQueue() {
       if (shipUaeEgInvFlag) dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG);
 
       if (qcInvFlag) {
-        try {
-          withLock_('QC_INV_SYNC', function () {
-            if (typeof syncQCtoInventory_UAE !== 'function') throw new Error('syncQCtoInventory_UAE is not defined');
-            syncQCtoInventory_UAE();
-          });
-          dp.setProperty(APP.INTERNAL.QC_INV_LAST_RUN, new Date().toISOString());
-          dp.deleteProperty(APP.INTERNAL.QC_INV_LAST_ERROR);
-        } catch (err) {
-          dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); // requeue
-          dp.setProperty(APP.INTERNAL.QC_INV_LAST_ERROR, String(err && err.message ? err.message : err));
-          logError_('coco_processSyncQueue:QC_INV', err);
+        if (typeof syncQCtoInventory_UAE !== 'function') {
+          dp.setProperty(APP.INTERNAL.QC_INV_LAST_ERROR, 'syncQCtoInventory_UAE is not defined');
+        } else {
+          try {
+            withLock_('QC_INV_SYNC', function () {
+              syncQCtoInventory_UAE();
+            });
+            dp.setProperty(APP.INTERNAL.QC_INV_LAST_RUN, new Date().toISOString());
+            dp.deleteProperty(APP.INTERNAL.QC_INV_LAST_ERROR);
+          } catch (err) {
+            dp.setProperty(APP.INTERNAL.QC_INV_SYNC_FLAG, '1'); // requeue
+            dp.setProperty(APP.INTERNAL.QC_INV_LAST_ERROR, String(err && err.message ? err.message : err));
+            logError_('coco_processSyncQueue:QC_INV', err);
+          }
         }
       }
 
       if (shipUaeEgInvFlag) {
-        try {
-          withLock_('SHIP_UAE_EG_INV_SYNC', function () {
-            if (typeof syncShipmentsUaeEgToInventory !== 'function') throw new Error('syncShipmentsUaeEgToInventory is not defined');
-            syncShipmentsUaeEgToInventory();
-          });
-          dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_RUN, new Date().toISOString());
-          dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR);
-        } catch (err) {
-          dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1'); // requeue
-          dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR, String(err && err.message ? err.message : err));
-          logError_('coco_processSyncQueue:SHIP_UAE_EG_INV', err);
+        if (typeof syncShipmentsUaeEgToInventory !== 'function') {
+          dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR, 'syncShipmentsUaeEgToInventory is not defined');
+        } else {
+          try {
+            withLock_('SHIP_UAE_EG_INV_SYNC', function () {
+              syncShipmentsUaeEgToInventory();
+            });
+            dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_RUN, new Date().toISOString());
+            dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR);
+          } catch (err) {
+            dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1'); // requeue
+            dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR, String(err && err.message ? err.message : err));
+            logError_('coco_processSyncQueue:SHIP_UAE_EG_INV', err);
+          }
         }
       }
 

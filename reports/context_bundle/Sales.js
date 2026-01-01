@@ -158,6 +158,9 @@ function syncSalesFromOrdersSheet() {
       APP.COLS.INV_TXNS.QTY_OUT
     ]);
 
+    assertRequiredColumns_(invEgSh, ['SKU', 'Warehouse (EG)', 'Avg Cost (EGP)']);
+    assertRequiredColumns_(catalogSh, ['SKU', 'Product Name', 'Variant / Color', 'Default Cost (EGP)']);
+
     // --------- 1) نجمع مبيعات Sales_EG ----------
     /**
      * key: OrderID||SKU||Warehouse

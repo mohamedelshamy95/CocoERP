@@ -1,0 +1,50 @@
+﻿5d9ba9d (HEAD -> audit/baseline-01) chore(audit): baseline snapshot before full review
+695b5eb (fix/avg-cost-eg, audit/full-consistency) fix: QC_UAE deterministic warehouse + Sales_EG deterministic txnDate
+0b6fd3d fix: deterministic QC_UAE warehouse + batched backfill in sync
+27c26f1 SUEG: per-unit extras + baseline freeze + deterministic dates
+8509bd6 chore: checkpoint before avg-cost-eg fix
+d7bee83 (origin/feature/auto-inventory-sync, feature/auto-inventory-sync) fix(inv): signed valuation snapshots + UAEΓåÆEG stability
+6fd1dcc fix(inv): signed snapshot valuation + invariants + EG staging
+95ed0e8 fix(inv): net UAE valuation + stable SUEG extras + ledger-based cost basis
+3b191a9 fix(review): repair Shipments_UAE_EG header + UI-safe helpers + UAEΓåÆEG idempotency
+f041464 fix(review): schema repair + idempotent ledger + UAEΓåÆEG line discriminator
+e2e0a23 chore(review): snapshot before full-system audit
+1b54f20 chore(trigger-safe): replace getUi alerts with safeAlert_
+1c352fd chore(trigger-safe): replace getUi alerts with safeAlert_
+9b64f2d fix(sync): re-entrant lock + remove UI calls from automation paths
+cc57bb6 chore(repo): ignore local vscode workspace
+ff27c3a chore(tooling): add eslint + npm workflow and claspignore
+ec08e21 chore: fix gitignore content
+97d7016 chore: add gitignore
+63d4306 chore: clean baseline + trigger-safe alerts + remove patch artifact
+c8b4023 Fix inventory automation flags + make Orders trigger-safe + remove INV_TXNS TYPE mapping
+ec83cbc Fix inventory automation flags + make Orders trigger-safe + remove INV_TXNS TYPE mapping
+4fc2919 Update Orders.js
+f1da1f1 Update ShipmentsCore.js
+b2137fc Update ShipmentsCore.js
+850940e Update InventoryCore.js
+045954a Update InventoryCore.js
+491e179 (origin/master, origin/HEAD) Update InventoryCore.js
+4ebb3a1 Update ShipmentsCore.js
+3eb1dbc Update AppCore.js
+a819e18 (master) Update AppCore.js
+a8c4387 Update ShipmentsCore.js
+b5c8232 Update ShipmentsCore.js
+2ae4239 Update ShipmentsCore.js
+d39b457 Update AppCore.js
+558e42e Update AppCore.js
+b1d9d64 Update ShipmentsCore.js
+0cf2995 Update ShipmentsCore.js
+3483558 Update Logistics.js
+47061eb Update Logistics.js
+fcef3ff Update AppCore.js
+801a089 Update AppCore.js
+1bd0eb2 Update Logistics.js
+24f2512 Update Purchases.js
+e3e5f42 Update Purchases.js
+7cdb551 Update AppCore.js
+344fba0 Update Purchases.js
+51fc688 Update Purchases.js
+a77a275 Update AppCore.js
+f432dc4 Create README.md
+950caa5 Init CocoERP clasp project
