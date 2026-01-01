@@ -314,6 +314,7 @@ function syncSalesFromOrdersSheet() {
     // --------- 4) حساب الـ delta وتسجيل الحركات ----------
     let newTxns = 0;
     let skipped = 0;
+    let skippedNoDeliveredDate = 0;
     const txns = [];
 
     Object.keys(salesAgg).forEach(function (key) {
@@ -337,6 +338,11 @@ function syncSalesFromOrdersSheet() {
       const prodName = rec.productName || (catInfo && catInfo.product) || rec.sku;
       const variant = rec.variant || (catInfo && catInfo.variant) || '';
 
+      if (!rec.lastDeliveredDate) {
+        skippedNoDeliveredDate++;
+        return;
+      }
+
       txns.push({
         type: 'OUT',
         sourceType: 'SALE_EG',
@@ -350,12 +356,20 @@ function syncSalesFromOrdersSheet() {
         unitCostEgp: unitCost,
         currency: 'EGP',
         unitPriceOrig: rec.unitPrice || '',
-        txnDate: rec.lastDeliveredDate || new Date(),
+        txnDate: rec.lastDeliveredDate,
         notes: 'SALE_EG (delta=' + deltaQty + ')'
       });
 
       newTxns++;
     });
+
+    if (skippedNoDeliveredDate > 0) {
+      logError_(
+        'syncSalesFromOrdersSheet.missingDeliveredDate',
+        new Error('Sales_EG rows missing Delivered Date (skipped for determinism).'),
+        { count: skippedNoDeliveredDate }
+      );
+    }
 
     // --------- 5) Write new txns + rebuild Snapshot مصر ----------
     if (txns.length) {
