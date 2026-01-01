@@ -1,9 +1,14 @@
 {
-  "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
+  "typescript.tsserver.maxTsServerMemory": 3072,
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.git/**": true,
+    "**/dist/**": true,
+    "**/build/**": true
   },
-  "eslint.validate": ["javascript"],
-  "files.eol": "\n",
-  "files.trimTrailingWhitespace": true
+  "search.exclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/build/**": true
+  }
 }
