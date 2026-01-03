@@ -1457,6 +1457,8 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
     const qcColVariant = qcMap['Variant / Color'] || qcMap[APP.COLS.QC_UAE.VARIANT] || qcMap[APP.COLS.PURCHASES.VARIANT];
     const qcColQtyOrdered = qcMap['Qty Ordered'] || qcMap[APP.COLS.QC_UAE.QTY_ORDERED];
     const qcColPurchLineId = qcMap[APP.COLS.QC_UAE.PURCHASE_LINE_ID] || qcMap['Purchases Line ID'];
+    const qcColWarehouse = qcMap[APP.COLS.QC_UAE.WAREHOUSE] || qcMap['Warehouse (UAE)'];
+    const qcColNotes = qcMap['Notes'];
 
     const qcColQtyReceived = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
     const qcColQtyDef = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
@@ -1616,6 +1618,9 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       if (!arrivedShipId) return;
 
       const shipId = arrivedShipId;
+      const defaultWh = (typeof normalizeWarehouseCode_ === 'function')
+        ? normalizeWarehouseCode_(APP.WAREHOUSES && APP.WAREHOUSES.UAE_DXB ? APP.WAREHOUSES.UAE_DXB : 'UAE-DXB')
+        : (APP.WAREHOUSES && APP.WAREHOUSES.UAE_DXB ? APP.WAREHOUSES.UAE_DXB : 'UAE-DXB');
 
       const existingRow = existingByLineId[lineId];
       if (existingRow) {
@@ -1625,7 +1630,8 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
           shipId: shipId,
           product: product,
           variant: variant,
-          batch: batch
+          batch: batch,
+          warehouse: defaultWh
         });
         return;
       }
@@ -1648,6 +1654,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       rowObj['Qty OK'] = '';
       rowObj['Notes'] = 'Auto (line-level) from Purchases';
       rowObj['Purchases Line ID'] = lineId;
+      rowObj['Warehouse (UAE)'] = defaultWh;
 
       const outRow = qcHeaders.map(function (h) {
         return (rowObj[h] !== undefined) ? rowObj[h] : '';
@@ -1683,6 +1690,17 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
         if (qcColVariant && u.variant) {
           const cur = qcSh.getRange(r, qcColVariant).getValue();
           if (!cur) qcSh.getRange(r, qcColVariant).setValue(u.variant);
+        }
+        if (qcColWarehouse && u.warehouse) {
+          const cur = qcSh.getRange(r, qcColWarehouse).getValue();
+          if (!cur) qcSh.getRange(r, qcColWarehouse).setValue(u.warehouse);
+          if (qcColNotes) {
+            const noteRange = qcSh.getRange(r, qcColNotes);
+            const curNote = String(noteRange.getValue() || '');
+            if (curNote.indexOf('Default WH:') === -1) {
+              noteRange.setValue((curNote ? curNote + ' | ' : '') + 'Default WH: ' + u.warehouse);
+            }
+          }
         }
       });
     }
@@ -2068,10 +2086,12 @@ function syncQCtoInventory_UAE(opts) {
     }
 
     const hasBatchQC = !!qcMap[APP.COLS.QC_UAE.BATCH_CODE];
+    const qcNotesCol = qcMap['Notes'];
 
     let newTxns = 0;
     let skipped = 0;
     const txns = [];
+    const missingWarehouseRows = [];
 
     // ----- Loop QC rows and add IN movements (UAE) -----
     qcData.forEach(function (row, idx) {
@@ -2098,8 +2118,17 @@ function syncQCtoInventory_UAE(opts) {
       const warehouseRaw = (row[qcMap[APP.COLS.QC_UAE.WAREHOUSE] - 1] || '').toString().trim();
       const warehouse = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(warehouseRaw) : warehouseRaw;
       if (!warehouse) {
-        logError_('syncQCtoInventory_UAE', new Error('Missing Warehouse (UAE) in QC_UAE'), { qcId: qcId, qcRow: (2 + idx) });
-        return; // skip this QC row
+        missingWarehouseRows.push({ qcId: qcId, row: sheetRow });
+        if (qcNotesCol) {
+          const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
+          const curNote = String(noteCell.getValue() || '');
+          const tag = 'Missing Warehouse (UAE) - sync skipped';
+          if (curNote.indexOf(tag) === -1) {
+            noteCell.setValue(curNote ? (curNote + ' | ' + tag) : tag);
+          }
+        }
+        skipped++;
+        return; // skip this QC row but continue processing others
       }
 
       // Qty In logic:
@@ -2158,6 +2187,16 @@ function syncQCtoInventory_UAE(opts) {
 
       newTxns++;
     });
+
+    if (missingWarehouseRows.length) {
+      try {
+        logError_(
+          'syncQCtoInventory_UAE.missingWarehouse',
+          new Error('Missing Warehouse (UAE) in QC_UAE rows'),
+          { count: missingWarehouseRows.length, rows: missingWarehouseRows.slice(0, 20) }
+        );
+      } catch (e) { }
+    }
 
     if (txns.length) {
       if (typeof logInventoryTxnBatch_ === 'function') {
