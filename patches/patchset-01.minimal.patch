@@ -1,4 +1,10 @@
-﻿diff --git a/AppCore.js b/AppCore.js
+﻿commit 687d26c07d7c4d7df2e953988589e1d067270275
+Author: Elshamy <42892839+mohamedelshamy95@users.noreply.github.com>
+Date:   Sat Jan 3 18:05:08 2026 +0200
+
+    Patchset-01: optimize pending UAEΓåÆEG scan; log duplicate Order IDs; normalize warehouse hints; rate-limit missing warehouse log
+
+diff --git a/AppCore.js b/AppCore.js
 index 25e3fe6..9563178 100644
 --- a/AppCore.js
 +++ b/AppCore.js
