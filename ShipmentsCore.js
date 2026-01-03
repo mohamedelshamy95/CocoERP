@@ -2386,6 +2386,9 @@ function syncShipmentsUaeEgToInventory() {
       // ===== Build ledger-derived UAE basis (qty/value/avg) + extras baseline (freeze across partial deltas) =====
       const TOL = 0.05;
 
+      const extrasBaselineMismatchSample = [];
+      let extrasBaselineMismatchCount = 0;
+
       const uaeBasis = _sueg_buildUaeBasisFromLedger_(ledgerSh, ledgerMap);
       const baselineExtraPUByLineKey = _sueg_buildUaeEgExtrasBaselineFromLedger_(ledgerSh, ledgerMap, TOL);
 
@@ -2584,10 +2587,9 @@ function syncShipmentsUaeEgToInventory() {
         if (baseline != null && !isNaN(Number(baseline))) {
           const b = Number(baseline);
           if (Math.abs(extrasPerUnit - b) > TOL) {
-            logError_(
-              'syncShipmentsUaeEgToInventory.extrasBaselineMismatch',
-              new Error('Extras-per-unit mismatch vs ledger baseline; using baseline to keep deltas consistent.'),
-              {
+            extrasBaselineMismatchCount++;
+            if (extrasBaselineMismatchSample.length < 20) {
+              extrasBaselineMismatchSample.push({
                 stableLineKey: stableLineKey,
                 shipmentId: shipmentId,
                 sku: sku,
@@ -2597,8 +2599,8 @@ function syncShipmentsUaeEgToInventory() {
                 shipCostPerUnit: shipCostPerUnit,
                 customsTotal: customsTotal,
                 otherTotal: otherTotal
-              }
-            );
+              });
+            }
           }
           extrasPerUnit = b;
         }
@@ -2778,6 +2780,26 @@ function syncShipmentsUaeEgToInventory() {
 
       // Write sheet updates (Qty Synced + optional autofills)
       shipSh.getRange(2, 1, shipData.length, shipSh.getLastColumn()).setValues(shipData);
+
+      // Aggregate + rate-limit noisy baseline mismatch logs (6h window).
+      if (extrasBaselineMismatchCount) {
+        try {
+          const dp = PropertiesService.getDocumentProperties();
+          const key = 'CocoERP_RL_sueg_extrasBaselineMismatch_v1';
+          const now = Date.now();
+          const last = Number(dp.getProperty(key) || 0);
+          const windowMs = 6 * 60 * 60 * 1000;
+
+          if (!last || (now - last) >= windowMs) {
+            dp.setProperty(key, String(now));
+            logError_(
+              'syncShipmentsUaeEgToInventory.extrasBaselineMismatch',
+              new Error('Extras-per-unit mismatch vs ledger baseline; using baseline to keep deltas consistent. (summary)'),
+              { count: extrasBaselineMismatchCount, sample: extrasBaselineMismatchSample }
+            );
+          }
+        } catch (e) { }
+      }
 
       // Rebuild snapshots (non-fatal if a specific builder is absent)
       if (typeof rebuildInventoryUAEFromLedger === 'function') rebuildInventoryUAEFromLedger();

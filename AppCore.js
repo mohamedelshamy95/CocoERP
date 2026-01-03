@@ -1627,7 +1627,16 @@ function coco_flagShipUaeEgInventorySyncFromEdit_(e) {
 }
 
 function coco_hasPendingShipUaeEgInventorySync_() {
-  const sh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+  let sh;
+  try {
+    sh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+  } catch (err) {
+    const msg = String((err ? err.message : '') || '');
+    if (/sheet\s+.*not\s+found/i.test(msg)) return false;
+    throw err;
+  }
+
+  if (!sh) return false;
   const map = getHeaderMap_(sh);
 
   const cShipId = map[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID] || map['Shipment ID'];

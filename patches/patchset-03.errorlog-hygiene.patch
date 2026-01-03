@@ -1,0 +1,93 @@
+diff --git a/AppCore.js b/AppCore.js
+--- a/AppCore.js
++++ b/AppCore.js
+@@
+ function coco_hasPendingShipUaeEgInventorySync_() {
+-  const sh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+-  const map = getHeaderMap_(sh);
++  let sh;
++  try {
++    sh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
++  } catch (err) {
++    const msg = String((err ? err.message : '') || '');
++    if (/sheet\s+.*not\s+found/i.test(msg)) return false;
++    throw err;
++  }
++
++  if (!sh) return false;
++  const map = getHeaderMap_(sh);
+ 
+   const cShipId = map[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID] || map['Shipment ID'];
+   const cSku = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
+   const cQty = map[APP.COLS.SHIP_UAE_EG.QTY] || map['Qty'];
+   const cSynced = map[APP.COLS.SHIP_UAE_EG.QTY_SYNCED] || map['Qty Synced'];
+
+diff --git a/ShipmentsCore.js b/ShipmentsCore.js
+--- a/ShipmentsCore.js
++++ b/ShipmentsCore.js
+@@
+       // ===== Build ledger-derived UAE basis (qty/value/avg) + extras baseline (freeze across partial deltas) =====
+       const TOL = 0.05;
++
++      const extrasBaselineMismatches = [];
+@@
+         const baseline = baselineExtraPUByLineKey[stableLineKey];
+         if (baseline != null && !isNaN(Number(baseline))) {
+           const b = Number(baseline);
+           if (Math.abs(extrasPerUnit - b) > TOL) {
+-            logError_(
+-              'syncShipmentsUaeEgToInventory.extrasBaselineMismatch',
+-              new Error('Extras-per-unit mismatch vs ledger baseline; using baseline to keep deltas consistent.'),
+-              {
+-                stableLineKey: stableLineKey,
+-                shipmentId: shipmentId,
+-                sku: sku,
+-                fromSheet: extrasPerUnit,
+-                baseline: b,
+-                qtyOriginal: qtyOriginal,
+-                shipCostPerUnit: shipCostPerUnit,
+-                customsTotal: customsTotal,
+-                otherTotal: otherTotal
+-              }
+-            );
++            extrasBaselineMismatches.push({
++              stableLineKey: stableLineKey,
++              shipmentId: shipmentId,
++              sku: sku,
++              fromSheet: extrasPerUnit,
++              baseline: b,
++              qtyOriginal: qtyOriginal,
++              shipCostPerUnit: shipCostPerUnit,
++              customsTotal: customsTotal,
++              otherTotal: otherTotal
++            });
+           }
+           extrasPerUnit = b;
+         }
+@@
+       // Write sheet updates (Qty Synced + optional autofills)
+       shipSh.getRange(2, 1, shipData.length, shipSh.getLastColumn()).setValues(shipData);
++
++      // Aggregate + rate-limit noisy baseline mismatch logs (6h window).
++      if (extrasBaselineMismatches.length) {
++        try {
++          const dp = PropertiesService.getDocumentProperties();
++          const key = 'CocoERP_RL_sueg_extrasBaselineMismatch_v1';
++          const now = Date.now();
++          const last = Number(dp.getProperty(key) || 0);
++          const windowMs = 6 * 60 * 60 * 1000;
++
++          if (!last || (now - last) >= windowMs) {
++            dp.setProperty(key, String(now));
++            logError_(
++              'syncShipmentsUaeEgToInventory.extrasBaselineMismatch',
++              new Error('Extras-per-unit mismatch vs ledger baseline; using baseline to keep deltas consistent. (summary)'),
++              { count: extrasBaselineMismatches.length, sample: extrasBaselineMismatches.slice(0, 20) }
++            );
++          }
++        } catch (e) { }
++      }
+ 
+       // Rebuild snapshots (non-fatal if a specific builder is absent)
+       if (typeof rebuildInventoryUAEFromLedger === 'function') rebuildInventoryUAEFromLedger();
+       if (typeof rebuildInventoryEGFromLedger === 'function') rebuildInventoryEGFromLedger();
