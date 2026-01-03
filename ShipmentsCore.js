@@ -1470,6 +1470,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
     const qcColQtyDef = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
     const qcColQtyMissing = qcMap[APP.COLS.QC_UAE.QTY_MISSING] || qcMap['Qty Missing'];
     const qcColQtyOk = qcMap[APP.COLS.QC_UAE.QTY_OK] || qcMap['Qty OK'];
+    const qcColDate = qcMap[APP.COLS.QC_UAE.QC_DATE] || qcMap['QC Date'];
 
     if (!qcColPurchLineId) {
       throw new Error('Missing QC_UAE column "Purchases Line ID". Run Logistics → Setup QC Layouts.');
@@ -1493,10 +1494,19 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
     // Eligibility (only Arrived UAE lines / keys)
     const arrivedShipIdByLineId = {};
     const arrivedShipIdByKey = {};
+    const arrivalDateByLineId = {};
+    const arrivalDateByKey = {};
 
     const shipLastRow = shipSh.getLastRow();
     if (shipLastRow >= 2 && shipColShipId) {
       const shipData = shipSh.getRange(2, 1, shipLastRow - 1, shipSh.getLastColumn()).getValues();
+
+      const normalizeDate_ = function (v) {
+        if (v instanceof Date) return v;
+        if (!v) return null;
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
+      };
 
       shipData.forEach(function (r) {
         const sid = String(r[shipColShipId - 1] || '').trim();
@@ -1507,9 +1517,10 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
         const v = shipColVariant ? String(r[shipColVariant - 1] || '').trim() : '';
 
         const status = shipColStatus ? String(r[shipColStatus - 1] || '').trim() : '';
-        const arrival = shipColArrival ? r[shipColArrival - 1] : null;
+        const arrivalRaw = shipColArrival ? r[shipColArrival - 1] : null;
+        const arrivalDate = normalizeDate_(arrivalRaw);
 
-        const isArrivedUAE = !!arrival || status === 'Arrived UAE';
+        const isArrivedUAE = !!arrivalDate || status === 'Arrived UAE';
 
         // Line-level key
         if (shipColLineId) {
@@ -1517,6 +1528,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
           if (lid) {
             if (!shipIdByLineId[lid]) shipIdByLineId[lid] = sid;
             if (isArrivedUAE && !arrivedShipIdByLineId[lid]) arrivedShipIdByLineId[lid] = sid;
+            if (isArrivedUAE && arrivalDate && !arrivalDateByLineId[lid]) arrivalDateByLineId[lid] = arrivalDate;
           }
         }
 
@@ -1525,6 +1537,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
           const key = oid + '||' + sku + '||' + v;
           if (!shipIdByKey[key]) shipIdByKey[key] = sid;
           if (isArrivedUAE && !arrivedShipIdByKey[key]) arrivedShipIdByKey[key] = sid;
+          if (isArrivedUAE && arrivalDate && !arrivalDateByKey[key]) arrivalDateByKey[key] = arrivalDate;
         }
       });
     }
@@ -1624,9 +1637,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       if (!arrivedShipId) return;
 
       const shipId = arrivedShipId;
-      const defaultWh = (typeof normalizeWarehouseCode_ === 'function')
-        ? normalizeWarehouseCode_(APP.WAREHOUSES && APP.WAREHOUSES.UAE_DXB ? APP.WAREHOUSES.UAE_DXB : 'UAE-DXB')
-        : (APP.WAREHOUSES && APP.WAREHOUSES.UAE_DXB ? APP.WAREHOUSES.UAE_DXB : 'UAE-DXB');
+      const arrivalDate = arrivalDateByLineId[lineId] || arrivalDateByKey[shipKey] || null;
 
       const existingRow = existingByLineId[lineId];
       if (existingRow) {
@@ -1637,7 +1648,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
           product: product,
           variant: variant,
           batch: batch,
-          warehouse: defaultWh
+          arrival: arrivalDate
         });
         return;
       }
@@ -1660,7 +1671,8 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       rowObj['Qty OK'] = '';
       rowObj['Notes'] = 'Auto (line-level) from Purchases';
       rowObj['Purchases Line ID'] = lineId;
-      rowObj['Warehouse (UAE)'] = defaultWh;
+      rowObj['Warehouse (UAE)'] = '';
+      rowObj['QC Date'] = arrivalDate || '';
 
       const outRow = qcHeaders.map(function (h) {
         return (rowObj[h] !== undefined) ? rowObj[h] : '';
@@ -1697,16 +1709,9 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
           const cur = qcSh.getRange(r, qcColVariant).getValue();
           if (!cur) qcSh.getRange(r, qcColVariant).setValue(u.variant);
         }
-        if (qcColWarehouse && u.warehouse) {
-          const cur = qcSh.getRange(r, qcColWarehouse).getValue();
-          if (!cur) qcSh.getRange(r, qcColWarehouse).setValue(u.warehouse);
-          if (qcColNotes) {
-            const noteRange = qcSh.getRange(r, qcColNotes);
-            const curNote = String(noteRange.getValue() || '');
-            if (curNote.indexOf('Default WH:') === -1) {
-              noteRange.setValue((curNote ? curNote + ' | ' : '') + 'Default WH: ' + u.warehouse);
-            }
-          }
+        if (qcColDate && u.arrival) {
+          const curDate = qcSh.getRange(r, qcColDate).getValue();
+          if (!curDate) qcSh.getRange(r, qcColDate).setValue(u.arrival);
         }
       });
     }
@@ -1924,9 +1929,12 @@ function qc_recalcRows_(qcSh, qcMap, rowStart, numRows, opts) {
     if (idxRes) {
       let cur = row[idxRes - 1];
       if (!cur && (options.updateResult !== false)) {
-        if (qtyOrd <= 0 && qtyRecv <= 0 && qtyDef <= 0) {
+        const hasInput = (qtyRecv > 0) || (qtyDef > 0);
+        if (!hasInput && qtyOrd <= 0) {
           cur = '';
-        } else if (missing === 0 && qtyDef === 0 && qtyRecv >= qtyOrd) {
+        } else if (!hasInput && qtyOrd > 0) {
+          cur = '';
+        } else if (missing === 0 && qtyDef === 0 && ok >= qtyOrd) {
           cur = 'PASS';
         } else if (ok > 0) {
           cur = 'PARTIAL';
