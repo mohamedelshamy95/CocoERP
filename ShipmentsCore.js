@@ -808,6 +808,12 @@ function _getInventoryUaeInfoForSku_(sku, optWarehouse) {
     const normalizedSku = (sku || '').toString().trim();
     if (!normalizedSku) return null;
 
+    const normWh_ = function (w) {
+      const t = (w || '').toString().trim();
+      if (!t) return '';
+      return (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(t) : t.toUpperCase();
+    };
+
     const invSh = getSheet_(APP.SHEETS.INVENTORY_UAE);
     const map = getHeaderMap_(invSh);
 
@@ -828,8 +834,8 @@ function _getInventoryUaeInfoForSku_(sku, optWarehouse) {
       .getRange(2, 1, lastRow - 1, invSh.getLastColumn())
       .getValues();
 
-    const targetWhRaw = (optWarehouse || '').toString().trim();
-    const targetWhUpper = targetWhRaw ? targetWhRaw.toUpperCase() : '';
+    // Normalize warehouse hint so UAE-KOR/UAE-ATTIA matches KOR/ATTIA (and other aliases).
+    const targetWhNorm = normWh_(optWarehouse);
 
     /** @type {{productName: string, variant: string, warehouse: string, onHand: number, available: number, avgCost: number} | null} */
     let fallbackMatch = null;
@@ -840,7 +846,7 @@ function _getInventoryUaeInfoForSku_(sku, optWarehouse) {
       if (!rowSku || rowSku !== normalizedSku) continue;
 
       const rowWhRaw = (row[colWh - 1] || '').toString().trim();
-      const rowWhUpper = rowWhRaw.toUpperCase();
+      const rowWhNorm = normWh_(rowWhRaw);
 
       const info = {
         productName: colProduct ? (row[colProduct - 1] || '') : '',
@@ -852,8 +858,8 @@ function _getInventoryUaeInfoForSku_(sku, optWarehouse) {
       };
 
       // لو محدد Warehouse معين
-      if (targetWhUpper) {
-        if (rowWhUpper === targetWhUpper) {
+      if (targetWhNorm) {
+        if (rowWhNorm && rowWhNorm === targetWhNorm) {
           return info; // match perfect
         }
         // غير مطابق → نخليه fallback لو مفيش غيره
@@ -950,9 +956,9 @@ function _fillShipmentUaeEgFromInventory_(sh, rowIndex, headerMapOpt) {
     const curCourier = (sh.getRange(rowIndex, colCourier).getValue() || '').toString().trim();
     if (!curCourier) {
       const resolvedWh = (info.warehouse || whHint || '').toUpperCase();
-      if (resolvedWh === 'UAE-ATTIA') {
+      if (resolvedWh === 'UAE-ATTIA' || resolvedWh === 'ATTIA') {
         sh.getRange(rowIndex, colCourier).setValue('Attia');
-      } else if (resolvedWh === 'UAE-KOR') {
+      } else if (resolvedWh === 'UAE-KOR' || resolvedWh === 'KOR') {
         sh.getRange(rowIndex, colCourier).setValue('Kor');
       }
     }
@@ -2190,11 +2196,21 @@ function syncQCtoInventory_UAE(opts) {
 
     if (missingWarehouseRows.length) {
       try {
-        logError_(
-          'syncQCtoInventory_UAE.missingWarehouse',
-          new Error('Missing Warehouse (UAE) in QC_UAE rows'),
-          { count: missingWarehouseRows.length, rows: missingWarehouseRows.slice(0, 20) }
-        );
+        // Rate-limit noisy permanent-data issues (avoid ErrorLog spam on the 1-minute queue trigger).
+        const dp = PropertiesService.getDocumentProperties();
+        const rlKey = 'CocoERP_RL_syncQCtoInventory_UAE_missingWarehouse_v1';
+        const last = Number(dp.getProperty(rlKey) || 0);
+        const now = Date.now();
+        const windowMs = 6 * 60 * 60 * 1000; // 6 hours
+
+        if (!last || (now - last) > windowMs) {
+          logError_(
+            'syncQCtoInventory_UAE.missingWarehouse',
+            new Error('Missing Warehouse (UAE) in QC_UAE rows'),
+            { count: missingWarehouseRows.length, rows: missingWarehouseRows.slice(0, 20) }
+          );
+          dp.setProperty(rlKey, String(now));
+        }
       } catch (e) { }
     }
 

@@ -1640,18 +1640,17 @@ function coco_hasPendingShipUaeEgInventorySync_() {
   const lr = sh.getLastRow();
   if (lr < 2) return false;
 
-  const vals = sh.getRange(2, 1, lr - 1, sh.getLastColumn()).getValues();
+  const n = lr - 1;
+  const shipIds = sh.getRange(2, cShipId, n, 1).getValues();
+  const skus = sh.getRange(2, cSku, n, 1).getValues();
+  const qtys = sh.getRange(2, cQty, n, 1).getValues();
+  const synceds = cSynced ? sh.getRange(2, cSynced, n, 1).getValues() : null;
 
-  const iShipId = cShipId - 1;
-  const iSku = cSku - 1;
-  const iQty = cQty - 1;
-  const iSynced = cSynced ? (cSynced - 1) : -1;
-
-  for (const r of vals) {
-    const sid = String(r[iShipId] || '').trim();
-    const sku = String(r[iSku] || '').trim();
-    const qty = Number(r[iQty] || 0);
-    const synced = iSynced >= 0 ? Number(r[iSynced] || 0) : 0;
+  for (let i = 0; i < n; i++) {
+    const sid = String(shipIds[i][0] || '').trim();
+    const sku = String(skus[i][0] || '').trim();
+    const qty = Number(qtys[i][0] || 0);
+    const synced = synceds ? Number(synceds[i][0] || 0) : 0;
 
     if (sid && sku && qty > synced) return true;
   }

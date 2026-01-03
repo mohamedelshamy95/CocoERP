@@ -436,6 +436,7 @@ function orders_syncFromPurchasesByOrderIds_(orderIds) {
     const lastO = shO.getLastRow();
     const existingRowById = {};
     const existingNotesById = {};
+    const duplicateRowsById = {};
 
     if (lastO >= 2) {
       const oidVals = shO.getRange(2, cOrder, lastO - 1, 1).getValues();
@@ -444,10 +445,28 @@ function orders_syncFromPurchasesByOrderIds_(orderIds) {
       for (let i = 0; i < oidVals.length; i++) {
         const oid = String(oidVals[i][0] || '').trim();
         if (!oid) continue;
-        existingRowById[oid] = i + 2;
+        const rowNum = i + 2;
+        if (existingRowById[oid]) {
+          if (!duplicateRowsById[oid]) duplicateRowsById[oid] = [existingRowById[oid]];
+          duplicateRowsById[oid].push(rowNum);
+          existingRowById[oid] = Math.min(existingRowById[oid], rowNum); // canonical = earliest row
+        } else {
+          existingRowById[oid] = rowNum;
+        }
         if (noteVals) existingNotesById[oid] = String(noteVals[i][0] || '').trim();
       }
     }
+
+    try {
+      const dupIds = Object.keys(duplicateRowsById);
+      if (dupIds.length) {
+        logError_(
+          'orders_syncFromPurchasesByOrderIds_.duplicateOrderIds',
+          new Error('Duplicate Order IDs exist in Orders sheet; updating canonical row only.'),
+          { count: dupIds.length, sample: dupIds.slice(0, 20).map(function (k) { return { orderId: k, rows: duplicateRowsById[k] }; }) }
+        );
+      }
+    } catch (e) { }
 
     const toUpdate = [];
     const toAppend = [];
