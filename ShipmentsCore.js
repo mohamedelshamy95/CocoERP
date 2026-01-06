@@ -1237,7 +1237,7 @@ function _updateShipmentUaeEgRowTotalsAndStatus_(sh, rowIndex, headerMapOpt) {
   // ----- Status -----
   const ship = colShipDate ? row[colShipDate - 1] : '';
   const eta = colEta ? row[colEta - 1] : '';
-  const arr = colArr ? row[colArr - 1] : '';
+  const arr = colArrival ? row[colArrival - 1] : '';
 
   let status = '';
 
@@ -1995,6 +1995,17 @@ function syncQCtoInventory_UAE(opts) {
     const purchMap = getHeaderMap_(purchSh);
     const ledgerMap = getHeaderMap_(ledgerSh);
 
+    // Token-safe Notes cleanup helper (removes ONLY exact tag tokens; preserves unrelated text)
+    function _noteRemoveExactTagToken_(note, tag) {
+      const parts = String(note || '')
+        .split('|')
+        .map(function (p) { return String(p || '').trim(); })
+        .filter(function (p) { return !!p; });
+
+      const out = parts.filter(function (p) { return p !== tag; });
+      return out.join(' | ');
+    }
+
     const lastQcRow = qcSh.getLastRow();
     if (lastQcRow < 2) return; // مفيش بيانات
 
@@ -2135,15 +2146,18 @@ function syncQCtoInventory_UAE(opts) {
       const variant = row[qcMap['Variant / Color'] - 1] || '';
       const warehouseRaw = (row[qcMap[APP.COLS.QC_UAE.WAREHOUSE] - 1] || '').toString().trim();
       const warehouse = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(warehouseRaw) : warehouseRaw;
-      // Hygiene: clear stale missing-warehouse note tag once warehouse is present
+
+      // Hygiene: clear stale missing-warehouse note tag once warehouse is present (token-safe)
       if (warehouse && qcNotesCol) {
         const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
         const curNote = String(noteCell.getValue() || '');
         const tag = 'Missing Warehouse (UAE) - sync skipped';
         if (curNote.indexOf(tag) !== -1) {
-          noteCell.setValue(curNote.replace(tag, '').replace(/\s+\|\s+$/, '').trim());
+          const cleaned = _noteRemoveExactTagToken_(curNote, tag);
+          if (cleaned !== curNote) noteCell.setValue(cleaned);
         }
       }
+
       if (!warehouse) {
         missingWarehouseRows.push({ qcId: qcId, row: sheetRow });
         if (qcNotesCol) {
@@ -2969,7 +2983,7 @@ function _sueg_buildUaeEgExtrasBaselineFromLedger_(ledgerSh, ledgerMap, tol) {
     if (st !== 'SHIP_UAE_EG') continue;
 
     const sid = String(r[idxSourceId] || '').trim();
-    if (!sid || sid.indexOf('SUEG|') !== 0) continue;
+    if (!sid || sid.indexOf('SUEG|') !== 0) return;
 
     const kind = /\|IN\s*$/i.test(sid) ? 'IN' : (/\|OUT\s*$/i.test(sid) ? 'OUT' : '');
     if (!kind) continue;
