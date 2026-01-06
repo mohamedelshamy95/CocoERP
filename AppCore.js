@@ -27,16 +27,17 @@ const APP = {
   // Canonical now used in Sheets:
   //  - UAE: KOR, ATTIA
   //  - EG : TAN-GH
-  // Legacy aliases are kept for backward compatibility (older data / older modules).
-  WAREHOUSES: {
-    // Canonical
-    KOR: 'KOR',
-    ATTIA: 'ATTIA',
-    TAN_GH: 'TAN-GH',
+    // Legacy aliases are kept for backward compatibility (older data / older modules).
+    WAREHOUSES: {
+      // Canonical
+      KOR: 'KOR',
+      ATTIA: 'ATTIA',
+      TAN_GH: 'TAN-GH',
+      EG_TAN: 'EG-TAN',
 
-    // Legacy (kept)
-    UAE_DXB: 'UAE-DXB',
-    UAE_ATTIA: 'UAE-ATTIA',
+      // Legacy (kept)
+      UAE_DXB: 'UAE-DXB',
+      UAE_ATTIA: 'UAE-ATTIA',
     UAE_KOR: 'UAE-KOR',
     EG_CAI: 'EG-CAI',
     EG_TANTA: 'EG-TANTA'
@@ -44,7 +45,7 @@ const APP = {
 
   WAREHOUSE_GROUPS: {
     UAE: ['KOR', 'ATTIA', 'UAE-DXB', 'UAE-ATTIA', 'UAE-KOR'],
-    EG: ['TAN-GH', 'EG-CAI', 'EG-TANTA']
+    EG: ['EG-TAN', 'TAN-GH', 'EG-CAI', 'EG-TANTA']
   },
 
   SHEETS: {
@@ -594,6 +595,9 @@ function normalizeWarehouseCode_(wh) {
   if (s === 'UAE' || s === 'UAE-DXB' || s === 'DUBAI') return 'KOR';
   if (s === 'UAE-KOR') return 'KOR';
   if (s === 'UAE-ATTIA') return 'ATTIA';
+
+  // EG canonical
+  if (s === 'TAN-GH' || s === 'TAN' || s === 'EG-TAN') return 'EG-TAN';
 
   return s;
 }

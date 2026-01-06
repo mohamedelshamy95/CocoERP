@@ -563,7 +563,11 @@ function _inv_makeTxnId_(o) {
  * كل مخزن (UAE-ATTIA / UAE-KOR / UAE-DXB) بيطلع في صف مستقل.
  */
 function _inv_normWh_(wh) {
-  return String(wh || '').trim().toUpperCase();
+  const raw = String(wh || '').trim();
+  if (typeof normalizeWarehouseCode_ === 'function') {
+    return normalizeWarehouseCode_(raw);
+  }
+  return raw.toUpperCase();
 }
 
 function _inv_isWhInList_(wh, list) {
@@ -582,7 +586,7 @@ function _inv_isUaeWarehouse_(wh) {
 }
 
 function _inv_isEgWarehouse_(wh) {
-  const list = (APP.WAREHOUSE_GROUPS && APP.WAREHOUSE_GROUPS.EG) ? APP.WAREHOUSE_GROUPS.EG : ['EG-CAI', 'EG-TANTA', 'TAN-GH'];
+  const list = (APP.WAREHOUSE_GROUPS && APP.WAREHOUSE_GROUPS.EG) ? APP.WAREHOUSE_GROUPS.EG : ['EG-TAN', 'EG-CAI', 'EG-TANTA', 'TAN-GH'];
   const w = _inv_normWh_(wh);
   return _inv_isWhInList_(w, list) || w.indexOf('EG') === 0;
 }

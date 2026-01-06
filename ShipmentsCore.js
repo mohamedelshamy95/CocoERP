@@ -2135,6 +2135,15 @@ function syncQCtoInventory_UAE(opts) {
       const variant = row[qcMap['Variant / Color'] - 1] || '';
       const warehouseRaw = (row[qcMap[APP.COLS.QC_UAE.WAREHOUSE] - 1] || '').toString().trim();
       const warehouse = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(warehouseRaw) : warehouseRaw;
+      // Hygiene: clear stale missing-warehouse note tag once warehouse is present
+      if (warehouse && qcNotesCol) {
+        const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
+        const curNote = String(noteCell.getValue() || '');
+        const tag = 'Missing Warehouse (UAE) - sync skipped';
+        if (curNote.indexOf(tag) !== -1) {
+          noteCell.setValue(curNote.replace(tag, '').replace(/\s+\|\s+$/, '').trim());
+        }
+      }
       if (!warehouse) {
         missingWarehouseRows.push({ qcId: qcId, row: sheetRow });
         if (qcNotesCol) {
@@ -3006,4 +3015,188 @@ function _sueg_buildUaeEgExtrasBaselineFromLedger_(ledgerSh, ledgerMap, tol) {
 function debugTestInventoryLookup_() {
   const info = _getInventoryUaeInfoForSku_('MONSTER-MQT65-PURPLE', 'UAE-DXB');
   Logger.log(JSON.stringify(info));
+}
+
+/**
+ * Migration: Fix legacy SHIP_UAE_EG IN rows that missed extras (per-unit ship/customs/other).
+ * - Pairs OUT/IN by base key (stableLineKey derived from Source ID).
+ * - Recomputes extrasPerUnit from Shipments_UAE_EG sheet (per-unit semantics).
+ * - Updates IN Unit Cost / Total Cost and appends MIG tag for idempotency.
+ *
+ * Safe to re-run: tagged rows (MIG04_FIX_SUEG_IN_COST_V1) are skipped; unchanged rows are ignored.
+ */
+function migrateFixShipUaeEgInLandedCostV1() {
+  return withLock_('MIG_FIX_SUEG_IN_COST_V1', function () {
+    const TAG = 'MIG04_FIX_SUEG_IN_COST_V1';
+    const RL_KEY = 'CocoERP_RL_MIG04_FIX_SUEG_IN_COST_V1';
+    const dp = PropertiesService.getDocumentProperties();
+
+    const ledgerSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
+    const shipSh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+
+    const ledgerMap = getHeaderMap_(ledgerSh);
+    const shipMap = getHeaderMap_(shipSh);
+
+    const idxSrcType = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type'] || 0) - 1;
+    const idxSrcId = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID'] || 0) - 1;
+    const idxUnitCost = (ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] || ledgerMap['Unit Cost (EGP)'] || 0) - 1;
+    const idxTotalCost = (ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] || ledgerMap['Total Cost (EGP)'] || 0) - 1;
+    const idxQtyIn = (ledgerMap[APP.COLS.INV_TXNS.QTY_IN] || ledgerMap['Qty In'] || 0) - 1;
+    const idxQtyOut = (ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] || ledgerMap['Qty Out'] || 0) - 1;
+    const idxNotes = (ledgerMap[APP.COLS.INV_TXNS.NOTES] || ledgerMap['Notes'] || 0) - 1;
+    if (idxSrcType < 0 || idxSrcId < 0 || idxUnitCost < 0 || idxTotalCost < 0 || idxQtyIn < 0) return { updated: 0 };
+
+    // Build extras-per-unit map from Shipments_UAE_EG (stableLineKey -> extrasPerUnit)
+    const idxShipId = shipMap[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID];
+    const idxShipBox = shipMap[APP.COLS.SHIP_UAE_EG.BOX_ID] || shipMap['Box ID'];
+    const idxShipLine = shipMap[APP.COLS.SHIP_UAE_EG.LINE_ID] || shipMap['Line ID'];
+    const idxShipSku = shipMap[APP.COLS.SHIP_UAE_EG.SKU];
+    const idxShipVariant = shipMap[APP.COLS.SHIP_UAE_EG.VARIANT] || shipMap['Variant / Color'];
+    const idxShipShipCost = shipMap[APP.COLS.SHIP_UAE_EG.SHIP_COST] || shipMap['Ship Cost (EGP)'] || shipMap['Ship Cost (EGP) – per unit'];
+    const idxShipCustoms = shipMap[APP.COLS.SHIP_UAE_EG.CUSTOMS] || shipMap['Customs (EGP)'] || shipMap['Customs (EGP) – per unit'];
+    const idxShipOther = shipMap[APP.COLS.SHIP_UAE_EG.OTHER] || shipMap['Other (EGP)'] || shipMap['Other (EGP) – per unit'];
+
+    const extrasByStable = {};
+    const shipLast = shipSh.getLastRow();
+    if (shipLast >= 2 && idxShipId && idxShipSku) {
+      const shipData = shipSh.getRange(2, 1, shipLast - 1, shipSh.getLastColumn()).getValues();
+      shipData.forEach(function (row) {
+        const shipmentId = String(row[idxShipId - 1] || '').trim();
+        const sku = String(row[idxShipSku - 1] || '').trim();
+        if (!shipmentId || !sku) return;
+
+        let lineDisc = '';
+        if (idxShipBox && String(row[idxShipBox - 1] || '').trim()) {
+          lineDisc = 'B' + String(row[idxShipBox - 1]).trim();
+        } else if (idxShipLine && String(row[idxShipLine - 1] || '').trim()) {
+          lineDisc = 'L' + String(row[idxShipLine - 1]).trim();
+        } else {
+          return; // cannot build stable key
+        }
+
+        const variantKey = idxShipVariant ? String(row[idxShipVariant - 1] || '').trim() : '';
+        const stable = ['SUEG', shipmentId, lineDisc, sku, variantKey].join('|');
+
+        const shipCost = idxShipShipCost ? Number(row[idxShipShipCost - 1] || 0) : 0;
+        const customsPerUnit = idxShipCustoms ? Number(row[idxShipCustoms - 1] || 0) : 0;
+        const otherPerUnit = idxShipOther ? Number(row[idxShipOther - 1] || 0) : 0;
+        const extrasPerUnit = shipCost + customsPerUnit + otherPerUnit;
+        extrasByStable[stable] = extrasPerUnit;
+      });
+    }
+
+    const lr = ledgerSh.getLastRow();
+    if (lr < 2) return { updated: 0 };
+
+    const data = ledgerSh.getRange(2, 1, lr - 1, ledgerSh.getLastColumn()).getValues();
+
+    const pairByBase = {};
+    data.forEach(function (row, idx) {
+      const srcType = String(row[idxSrcType] || '').trim();
+      if (srcType !== 'SHIP_UAE_EG') return;
+      const srcId = String(row[idxSrcId] || '').trim();
+      if (!srcId || srcId.indexOf('SUEG|') !== 0) return;
+
+      const kind = /\|IN\s*$/i.test(srcId) ? 'IN' : (/\|OUT\s*$/i.test(srcId) ? 'OUT' : '');
+      if (!kind) return;
+
+      const base = _sueg_baseKeyNoType_(srcId);
+      const stableKey = _sueg_stableLineKeyFromBaseKey_(base);
+      if (!pairByBase[base]) pairByBase[base] = { stableKey: stableKey, IN: null, OUT: null };
+
+      pairByBase[base][kind] = {
+        rowIndex: idx + 2,
+        unitCost: Number(row[idxUnitCost] || 0),
+        totalCost: Number(row[idxTotalCost] || 0),
+        qtyIn: Number(row[idxQtyIn] || 0),
+        qtyOut: Number(row[idxQtyOut] || 0),
+        notes: idxNotes >= 0 ? String(row[idxNotes] || '') : ''
+      };
+    });
+
+    const updates = [];
+    const TOL = 0.0001;
+
+    Object.keys(pairByBase).forEach(function (baseKey) {
+      const pair = pairByBase[baseKey];
+      const outRow = pair.OUT;
+      const inRow = pair.IN;
+      if (!outRow || !inRow) return;
+
+      const qty = Number(inRow.qtyIn || inRow.qtyOut || 0);
+      if (!qty || qty <= 0) return;
+      if (idxNotes >= 0 && inRow.notes.indexOf(TAG) !== -1) return; // already migrated
+
+      const baseCost = Number(outRow.unitCost || 0);
+      let extrasPerUnit = (pair.stableKey && extrasByStable.hasOwnProperty(pair.stableKey))
+        ? Number(extrasByStable[pair.stableKey] || 0)
+        : 0;
+
+      if (!extrasPerUnit) {
+        const diff = Number(inRow.unitCost || 0) - baseCost;
+        if (diff > 0) extrasPerUnit = diff;
+      }
+      if (!extrasPerUnit) return;
+
+      const newUnitCost = baseCost + extrasPerUnit;
+      const newTotalCost = newUnitCost * qty;
+
+      if (Math.abs(newUnitCost - Number(inRow.unitCost || 0)) < TOL &&
+        Math.abs(newTotalCost - Number(inRow.totalCost || 0)) < 0.01) {
+        return;
+      }
+
+      let newNotes = inRow.notes || '';
+      if (idxNotes >= 0 && newNotes.indexOf(TAG) === -1) {
+        newNotes = newNotes ? (newNotes + ' | ' + TAG) : TAG;
+      }
+
+      updates.push({
+        row: inRow.rowIndex,
+        unitCost: newUnitCost,
+        totalCost: newTotalCost,
+        notes: newNotes
+      });
+    });
+
+    if (!updates.length) return { updated: 0 };
+
+    updates.sort(function (a, b) { return a.row - b.row; });
+
+    function writeColumn_(colIndex, getter) {
+      if (!colIndex) return;
+      let i = 0;
+      while (i < updates.length) {
+        const startRow = updates[i].row;
+        const vals = [];
+        let expected = startRow;
+        while (i < updates.length && updates[i].row === expected) {
+          vals.push([getter(updates[i])]);
+          expected++;
+          i++;
+        }
+        ledgerSh.getRange(startRow, colIndex, vals.length, 1).setValues(vals);
+      }
+    }
+
+    writeColumn_(idxUnitCost + 1, function (u) { return u.unitCost; });
+    writeColumn_(idxTotalCost + 1, function (u) { return u.totalCost; });
+    if (idxNotes >= 0) {
+      writeColumn_(idxNotes + 1, function (u) { return u.notes; });
+    }
+
+    try {
+      const now = Date.now();
+      const last = Number(dp.getProperty(RL_KEY) || 0);
+      const windowMs = 6 * 60 * 60 * 1000;
+      if (!last || (now - last) > windowMs) {
+        logError_('migrateFixShipUaeEgInLandedCostV1', new Error('Updated SHIP_UAE_EG IN landed costs (legacy extras fix).'), {
+          updated: updates.length
+        });
+        dp.setProperty(RL_KEY, String(now));
+      }
+    } catch (e) { }
+
+    return { updated: updates.length };
+  });
 }
