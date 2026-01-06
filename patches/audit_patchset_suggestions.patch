@@ -1,0 +1,63 @@
+*** Begin Patch
+*** Update File: ShipmentsCore.js
+@@
+-      const totalForShipment = (shipCostPerUnit * qty) + customs + other;
++      // Contract: Customs/Other headers are per-unit (APP.COLS.SHIP_UAE_EG); multiply by Qty to avoid underpricing landed cost.
++      // Risk: if the sheet currently stores totals, migrate values before enabling this to prevent double-counting.
++      const totalForShipment = (shipCostPerUnit + customs + other) * qty;
+*** End Patch
+
+*** Begin Patch
+*** Update File: ShipmentsCore.js
+@@
+-  const shipCost = colShipCost ? Number(row[colShipCost - 1] || 0) : 0;
+-  const customs = colCustoms ? Number(row[colCustoms - 1] || 0) : 0;
+-  const other = colOther ? Number(row[colOther - 1] || 0) : 0;
+-
+-  if (colTotal) {
+-    const totalShipment = (shipCost * qty) + customs + other;
+-    sh.getRange(rowIndex, colTotal).setValue(totalShipment);
+-    sh.getRange(rowIndex, colTotal).setNumberFormat('0.00');
+-  }
++  const shipCost = colShipCost ? Number(row[colShipCost - 1] || 0) : 0;
++  const customs = colCustoms ? Number(row[colCustoms - 1] || 0) : 0;
++  const other = colOther ? Number(row[colOther - 1] || 0) : 0;
++
++  if (colTotal) {
++    // Contract: Customs/Other columns are per-unit; total must scale with Qty so ledger sync stays deterministic.
++    // Risk: legacy rows that stored totals need a one-time migration before enabling this formula.
++    const totalShipment = (shipCost + customs + other) * qty;
++    sh.getRange(rowIndex, colTotal).setValue(totalShipment);
++    sh.getRange(rowIndex, colTotal).setNumberFormat('0.00');
++  }
+*** End Patch
+
+*** Begin Patch
+*** Update File: ShipmentsCore.js
+@@
+-        const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
+-        const customsTotal = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
+-        const otherTotal = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
+-
+-        // Enforce sheet Total Cost = Qty * shipCostPerUnit + customsTotal + otherTotal (if column exists)
+-        if (idxShipTotal != null) {
+-          row[idxShipTotal] = (qtyOriginal * shipCostPerUnit) + customsTotal + otherTotal;
+-        }
+-
+-        let extrasPerUnit = shipCostPerUnit + ((customsTotal + otherTotal) / qtyOriginal);
++        const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
++        const customsPerUnit = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
++        const otherPerUnit = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
++
++        // Contract: Customs/Other columns are per-unit; keep extrasPerUnit deterministic and total = extrasPerUnit * Qty.
++        // Risk: if the sheet currently stores totals, values must be migrated once to avoid overcharging.
++        const extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
++        const customsTotal = customsPerUnit * qtyOriginal;
++        const otherTotal = otherPerUnit * qtyOriginal;
++
++        // Enforce sheet Total Cost = Qty * (ship + customs + other) (if column exists)
++        if (idxShipTotal != null) {
++          row[idxShipTotal] = extrasPerUnit * qtyOriginal;
++        }
+*** End Patch
+
