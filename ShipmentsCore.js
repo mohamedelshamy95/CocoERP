@@ -438,10 +438,12 @@ function updateShipmentsUaeEgStatusAndTotals(opts) {
       // ----- Total Cost -----
       const qty = Number(row[idx.qty] || 0);
       const shipCostPerUnit = Number(row[idx.shipCost] || 0);
-      const customs = Number(row[idx.customs] || 0);
-      const other = Number(row[idx.other] || 0);
+      const customsPerUnit = Number(row[idx.customs] || 0);
+      const otherPerUnit = Number(row[idx.other] || 0);
 
-      const totalForShipment = (shipCostPerUnit * qty) + customs + other;
+      // Per-unit semantics: Customs/Other are per-unit; Total Cost = Qty * (Ship + Customs + Other)
+      const extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
+      const totalForShipment = extrasPerUnit * qty;
       row[idx.total] = totalForShipment;
 
       // ----- Status -----
@@ -1221,11 +1223,13 @@ function _updateShipmentUaeEgRowTotalsAndStatus_(sh, rowIndex, headerMapOpt) {
   // ----- Total Cost (EGP) -----
   const qty = colQty ? Number(row[colQty - 1] || 0) : 0;
   const shipCost = colShipCost ? Number(row[colShipCost - 1] || 0) : 0;
-  const customs = colCustoms ? Number(row[colCustoms - 1] || 0) : 0;
-  const other = colOther ? Number(row[colOther - 1] || 0) : 0;
+  const customsPerUnit = colCustoms ? Number(row[colCustoms - 1] || 0) : 0;
+  const otherPerUnit = colOther ? Number(row[colOther - 1] || 0) : 0;
 
   if (colTotal) {
-    const totalShipment = (shipCost * qty) + customs + other;
+    // Per-unit semantics: Customs/Other columns are per-unit.
+    const extrasPerUnit = shipCost + customsPerUnit + otherPerUnit;
+    const totalShipment = extrasPerUnit * qty;
     sh.getRange(rowIndex, colTotal).setValue(totalShipment);
     sh.getRange(rowIndex, colTotal).setNumberFormat('0.00');
   }
@@ -2571,17 +2575,19 @@ function syncShipmentsUaeEgToInventory() {
 
         const baseCost = Number(basis.avgCost || 0);
 
-        // ===== Extras policy (per-unit ship + allocated totals) + freeze across partial deltas =====
+        // ===== Extras policy (per-unit ship/customs/other) + freeze across partial deltas =====
         const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
-        const customsTotal = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
-        const otherTotal = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
+        const customsPerUnit = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
+        const otherPerUnit = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
 
-        // Enforce sheet Total Cost = Qty * shipCostPerUnit + customsTotal + otherTotal (if column exists)
+        let extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
+        const customsTotal = customsPerUnit * qtyOriginal;
+        const otherTotal = otherPerUnit * qtyOriginal;
+
+        // Enforce sheet Total Cost = Qty * (ship + customs + other) (if column exists)
         if (idxShipTotal != null) {
-          row[idxShipTotal] = (qtyOriginal * shipCostPerUnit) + customsTotal + otherTotal;
+          row[idxShipTotal] = extrasPerUnit * qtyOriginal;
         }
-
-        let extrasPerUnit = shipCostPerUnit + ((customsTotal + otherTotal) / qtyOriginal);
 
         const baseline = baselineExtraPUByLineKey[stableLineKey];
         if (baseline != null && !isNaN(Number(baseline))) {
@@ -2597,8 +2603,8 @@ function syncShipmentsUaeEgToInventory() {
                 baseline: b,
                 qtyOriginal: qtyOriginal,
                 shipCostPerUnit: shipCostPerUnit,
-                customsTotal: customsTotal,
-                otherTotal: otherTotal
+                customsPerUnit: customsPerUnit,
+                otherPerUnit: otherPerUnit
               });
             }
           }

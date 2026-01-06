@@ -1,0 +1,130 @@
+# PATCHSET-00: Enforce per-unit Customs/Other semantics in Shipments_UAE_EG (Rationale: match contract; Risk: migrate legacy total-valued rows before applying to avoid double-charging).
+*** Begin Patch
+*** Update File: ShipmentsCore.js
+@@
+-      const qty = Number(row[idx.qty] || 0);
+-      const shipCostPerUnit = Number(row[idx.shipCost] || 0);
+-      const customs = Number(row[idx.customs] || 0);
+-      const other = Number(row[idx.other] || 0);
+-
+-      const totalForShipment = (shipCostPerUnit * qty) + customs + other;
+-      row[idx.total] = totalForShipment;
++      const qty = Number(row[idx.qty] || 0);
++      const shipCostPerUnit = Number(row[idx.shipCost] || 0);
++      const customsPerUnit = Number(row[idx.customs] || 0);
++      const otherPerUnit = Number(row[idx.other] || 0);
++
++      // PATCHSET-00: per-unit inputs; Total Cost = Qty * (ship + customs + other)
++      const extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
++      const totalForShipment = extrasPerUnit * qty;
++      row[idx.total] = totalForShipment;
+*** End Patch
+
+# PATCHSET-00: Row-level recalc uses per-unit Customs/Other (Rationale: keep onEdit consistent; Risk: legacy totals must be converted once).
+*** Begin Patch
+*** Update File: ShipmentsCore.js
+@@
+-  const shipCost = colShipCost ? Number(row[colShipCost - 1] || 0) : 0;
+-  const customs = colCustoms ? Number(row[colCustoms - 1] || 0) : 0;
+-  const other = colOther ? Number(row[colOther - 1] || 0) : 0;
+-
+-  if (colTotal) {
+-    const totalShipment = (shipCost * qty) + customs + other;
+-    sh.getRange(rowIndex, colTotal).setValue(totalShipment);
+-    sh.getRange(rowIndex, colTotal).setNumberFormat('0.00');
+-  }
++  const shipCost = colShipCost ? Number(row[colShipCost - 1] || 0) : 0;
++  const customsPerUnit = colCustoms ? Number(row[colCustoms - 1] || 0) : 0;
++  const otherPerUnit = colOther ? Number(row[colOther - 1] || 0) : 0;
++
++  if (colTotal) {
++    // PATCHSET-00: Total Cost = Qty * (ship + customs + other)
++    const extrasPerUnit = shipCost + customsPerUnit + otherPerUnit;
++    const totalShipment = extrasPerUnit * qty;
++    sh.getRange(rowIndex, colTotal).setValue(totalShipment);
++    sh.getRange(rowIndex, colTotal).setNumberFormat('0.00');
++  }
+*** End Patch
+
+# PATCHSET-00: Inventory sync keeps baseline freeze but treats Customs/Other as per-unit (Rationale: deterministic landed cost; Risk: migrate legacy totals first).
+*** Begin Patch
+*** Update File: ShipmentsCore.js
+@@
+-        // ===== Extras policy (per-unit ship + allocated totals) + freeze across partial deltas =====
+-        const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
+-        const customsTotal = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
+-        const otherTotal = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
+-
+-        // Enforce sheet Total Cost = Qty * shipCostPerUnit + customsTotal + otherTotal (if column exists)
+-        if (idxShipTotal != null) {
+-          row[idxShipTotal] = (qtyOriginal * shipCostPerUnit) + customsTotal + otherTotal;
+-        }
+-
+-        let extrasPerUnit = shipCostPerUnit + ((customsTotal + otherTotal) / qtyOriginal);
++        // ===== Extras policy (per-unit ship/customs/other) + freeze across partial deltas =====
++        const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
++        const customsPerUnit = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
++        const otherPerUnit = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
++
++        let extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
++        const customsTotal = customsPerUnit * qtyOriginal;
++        const otherTotal = otherPerUnit * qtyOriginal;
++
++        // Enforce sheet Total Cost = Qty * (ship + customs + other) (if column exists)
++        if (idxShipTotal != null) {
++          row[idxShipTotal] = extrasPerUnit * qtyOriginal;
++        }
+@@
+-                qtyOriginal: qtyOriginal,
+-                shipCostPerUnit: shipCostPerUnit,
+-                customsTotal: customsTotal,
+-                otherTotal: otherTotal
++                qtyOriginal: qtyOriginal,
++                shipCostPerUnit: shipCostPerUnit,
++                customsPerUnit: customsPerUnit,
++                otherPerUnit: otherPerUnit
+               });
+             }
+           }
+*** End Patch
+
+# PATCHSET-00: Clarify contract (per-unit) + operator note for migration (Rationale: remove ambiguity; Risk: none, docs only).
+*** Begin Patch
+*** Update File: docs/SYSTEM_CONTRACT_PACK.md
+@@
+ ### D.8 Shipments_UAE_EG
+ (As provided; Line ID required; Qty Synced supports delta posting)
++- Cost semantics (canonical): `Ship Cost (EGP) – per unit`, `Customs (EGP) – per unit`, and `Other (EGP) – per unit` are all **per-unit** inputs.
++- Total Cost formula: `Total Cost (EGP) = Qty * (Ship Cost per unit + Customs per unit + Other per unit)`.
+*** End Patch
+
+*** Begin Patch
+*** Update File: docs/RUNBOOK.md
+@@
+ 11) Catalog_EG  
+ 12) Sales_Inbox_EasyOrder  
+ 13) Sales_EG  
+ 
++**Cost entry rule (Stage 8):** Shipments_UAE_EG uses per-unit inputs for Ship Cost, Customs, and Other; Total Cost must equal `Qty * (ship + customs + other)`.
+*** End Patch
+
+*** Begin Patch
+*** Add File: reports/OPERATOR_NOTE_PATCHSET_00_SHIP_UAE_EG_PER_UNIT.md
++# Patchset-00: Shipments_UAE_EG Customs/Other Per-Unit Migration
++
++**What changed**
++- Shipments_UAE_EG cost semantics are per-unit: Ship Cost + Customs + Other are per-unit inputs; Total Cost = Qty * (ship + customs + other).
++
++**One-time migration for legacy rows that stored totals**
++1) Filter Shipments_UAE_EG to rows where Qty > 0.
++2) For each row that previously held totals:
++   - Customs per unit = (legacy Customs total) / Qty
++   - Other per unit   = (legacy Other total) / Qty
++   - If Qty = 0, skip the row and update Qty first; do not divide by zero.
++3) Recompute Total Cost = Qty * (Ship Cost per unit + Customs per unit + Other per unit).
++4) Rerun `updateShipmentsUaeEgStatusAndTotals()` to normalize totals/formats, then rerun `syncShipmentsUaeEgToInventory()` to align ledger costs.
++
++**Verification**
++- Pick a sample row with Qty > 1 and confirm Total Cost equals Qty * (ship + customs + other).
++- After inventory sync, check Inventory_Transactions entries for that shipment: Unit Cost = base cost + extrasPerUnit (ship + customs + other), no divide-by-qty adjustments.
+*** End Patch
