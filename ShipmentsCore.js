@@ -34,6 +34,23 @@ const SHIPMENT_STATUS = {
   ARRIVED_EG: 'Arrived EG'
 };
 
+/** Token-safe note helpers (pipe-delimited) */
+function _noteTokensSafe_(note) {
+  return String(note || '')
+    .split('|')
+    .map(function (p) { return String(p || '').trim(); })
+    .filter(function (p) { return !!p; });
+}
+function _noteAddTokenSafe_(note, tag) {
+  const tokens = _noteTokensSafe_(note);
+  if (tokens.indexOf(tag) === -1) tokens.push(tag);
+  return tokens.join(' | ');
+}
+function _noteRemoveTokenSafe_(note, tag) {
+  const out = _noteTokensSafe_(note).filter(function (p) { return p !== tag; });
+  return out.join(' | ');
+}
+
 /* ===================================================================
  * CN → UAE – Status + Totals
  * =================================================================== */
@@ -1934,32 +1951,39 @@ function qc_recalcQuantitiesAndResult(opts) {
  * - Recalculates only edited rows, only when edit touches Qty Ordered/Received/Defective.
  */
 function qcOnEdit_(e) {
-  if (!e || !e.range) return;
+  try {
+    if (!e || !e.range) return;
 
-  const sh = e.range.getSheet();
-  if (sh.getName() !== (APP.SHEETS.QC_UAE || 'QC_UAE')) return;
+    const sh = e.range.getSheet();
+    if (!sh) return;
+    if (sh.getName() !== APP.SHEETS.QC_UAE && sh.getName() !== 'QC_UAE') return;
 
-  const qcMap = getHeaderMap_(sh);
+    const qcMap = getHeaderMap_(sh);
+    if (!qcMap) return;
 
-  const colOrdered = qcMap['Qty Ordered'];
-  const colRecv = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
-  const colDef = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
+    const colOrdered = qcMap['Qty Ordered'];
+    const colRecv = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
+    const colDef = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
 
-  if (!colOrdered || !colRecv || !colDef) return;
+    // Require driving columns before doing any work; silent no-op if layout is incomplete.
+    if (!colOrdered || !colRecv || !colDef) return;
 
-  // Only react when edit intersects the driving columns
-  const colStart = e.range.getColumn();
-  const colEnd = colStart + e.range.getNumColumns() - 1;
+    // Only react when edit intersects the driving columns
+    const colStart = e.range.getColumn();
+    const colEnd = colStart + e.range.getNumColumns() - 1;
 
-  const drives = [colOrdered, colRecv, colDef];
-  const intersects = drives.some(c => c >= colStart && c <= colEnd);
-  if (!intersects) return;
+    const drives = [colOrdered, colRecv, colDef];
+    const intersects = drives.some(function (c) { return c >= colStart && c <= colEnd; });
+    if (!intersects) return;
 
-  const rowStart = Math.max(2, e.range.getRow());
-  const rowEnd = Math.max(rowStart, e.range.getRow() + e.range.getNumRows() - 1);
-  const numRows = rowEnd - rowStart + 1;
+    const rowStart = Math.max(2, e.range.getRow());
+    const rowEnd = Math.max(rowStart, e.range.getRow() + e.range.getNumRows() - 1);
+    const numRows = rowEnd - rowStart + 1;
 
-  qc_recalcRows_(sh, qcMap, rowStart, numRows, { silent: true, setDate: false, updateResult: true });
+    qc_recalcRows_(sh, qcMap, rowStart, numRows, { silent: true, setDate: false, updateResult: true, noThrow: true });
+  } catch (err) {
+    logError_('qcOnEdit_', err, { a1: e && e.range ? e.range.getA1Notation() : '' });
+  }
 }
 
 /**
@@ -1988,6 +2012,7 @@ function qc_recalcRows_(qcSh, qcMap, rowStart, numRows, opts) {
   const idxDate = qcMap['QC Date'];
 
   if (!idxOrd || !idxRecv || !idxDef || !idxMiss || !idxOk) {
+    if (options.noThrow) return { updated: 0, skipped: true, reason: 'missing_headers' };
     throw new Error('qc_recalcRows_: Missing QC_UAE columns (Qty Ordered/Received/Defective/OK/Missing).');
   }
 
@@ -2086,22 +2111,6 @@ function syncQCtoInventory_UAE(opts) {
     const purchMap = getHeaderMap_(purchSh);
     const ledgerMap = getHeaderMap_(ledgerSh);
 
-    // Token-safe Notes helpers (preserve unrelated text; separators are '|')
-    function _noteTokens_(note) {
-      return String(note || '')
-        .split('|')
-        .map(function (p) { return String(p || '').trim(); })
-        .filter(function (p) { return !!p; });
-    }
-    function _noteRemoveExactToken_(note, tag) {
-      const out = _noteTokens_(note).filter(function (p) { return p !== tag; });
-      return out.join(' | ');
-    }
-    function _noteAddToken_(note, tag) {
-      const tokens = _noteTokens_(note);
-      if (tokens.indexOf(tag) === -1) tokens.push(tag);
-      return tokens.join(' | ');
-    }
     function _normalizeUaeWarehouseOrBlank_(val) {
       const norm = (typeof normalizeWarehouseCode_ === 'function')
         ? normalizeWarehouseCode_(val)
@@ -2199,17 +2208,14 @@ function syncQCtoInventory_UAE(opts) {
 
     }
 
-    // ===== Determine already-synced QC rows (new: by QC ID, legacy: by notes row number) =====
+    // ===== Determine already-synced QC rows (by stable Source ID) =====
     const syncedQcIds = new Set();
-    const syncedLegacyRows = new Set();
-
     const ledgerLast = ledgerSh.getLastRow();
     if (ledgerLast >= 2) {
       const ledgerData = ledgerSh.getRange(2, 1, ledgerLast - 1, ledgerSh.getLastColumn()).getValues();
 
       const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] ? ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1 : null;
       const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] ? ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1 : null;
-      const idxNotes = ledgerMap[APP.COLS.INV_TXNS.NOTES] ? ledgerMap[APP.COLS.INV_TXNS.NOTES] - 1 : null;
 
       ledgerData.forEach(function (row) {
         const srcType = idxSrcType != null ? row[idxSrcType] : '';
@@ -2218,21 +2224,15 @@ function syncQCtoInventory_UAE(opts) {
         const srcId = idxSrcId != null ? row[idxSrcId] : '';
         if (srcId) {
           syncedQcIds.add(String(srcId).trim());
-          return;
-        }
-
-        // Legacy fallback: parse "row 12" from notes
-        const notes = idxNotes != null ? (row[idxNotes] || '') : '';
-        const m = String(notes).match(/row\s+(\d+)/i);
-        if (m) {
-          const rNum = Number(m[1]);
-          if (rNum) syncedLegacyRows.add(rNum);
         }
       });
     }
 
     const hasBatchQC = !!qcMap[APP.COLS.QC_UAE.BATCH_CODE];
     const qcNotesCol = qcMap['Notes'];
+    const missingWarehouseTag = 'QC_SYNC_SKIPPED_NO_WAREHOUSE_V1';
+    const missingQcIdTag = 'QC_SYNC_SKIPPED_NO_ID_V1';
+    const missingQcDateTag = 'QC_SYNC_SKIPPED_NO_DATE_V1';
 
     let newTxns = 0;
     let skipped = 0;
@@ -2247,10 +2247,29 @@ function syncQCtoInventory_UAE(opts) {
       const sku = (row[qcMap[APP.COLS.QC_UAE.SKU] - 1] || '').toString().trim();
       if (!orderId || !sku) return;
 
+      const qcLineId = qcColPurchLineId ? String(row[qcColPurchLineId - 1] || '').trim() : '';
+      const product = row[qcMap['Product Name'] - 1] || '';
+      const variant = row[qcMap['Variant / Color'] - 1] || '';
       let qcId = qcIdCol ? String(row[qcIdCol - 1] || '').trim() : '';
-      if (!qcId) qcId = 'QC_ROW_' + sheetRow;
+      const stableSourceId = qcId || (qcLineId ? ('QCL|' + qcLineId + '|' + sku + '|' + variant) : '');
 
-      if (syncedQcIds.has(qcId) || syncedLegacyRows.has(sheetRow)) {
+      if (!stableSourceId) {
+        if (qcNotesCol) {
+          const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
+          const curNote = String(noteCell.getValue() || '');
+          const withTag = _noteAddTokenSafe_(curNote, missingQcIdTag);
+          if (withTag !== curNote) noteCell.setValue(withTag);
+        }
+        skipped++;
+        return;
+      } else if (qcNotesCol) {
+        const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
+        const curNote = String(noteCell.getValue() || '');
+        const cleaned = _noteRemoveTokenSafe_(curNote, missingQcIdTag);
+        if (cleaned !== curNote) noteCell.setValue(cleaned);
+      }
+
+      if (syncedQcIds.has(stableSourceId)) {
         skipped++;
         return;
       }
@@ -2259,10 +2278,7 @@ function syncQCtoInventory_UAE(opts) {
       let batchCode = (batchCodeRaw || '').toString().trim();
       if (!batchCode) batchCode = String(orderId) + '||' + String(sku);
 
-      const product = row[qcMap['Product Name'] - 1] || '';
-      const variant = row[qcMap['Variant / Color'] - 1] || '';
       const qcWarehouseRaw = (row[qcMap[APP.COLS.QC_UAE.WAREHOUSE] - 1] || '').toString().trim();
-      const qcLineId = qcColPurchLineId ? String(row[qcColPurchLineId - 1] || '').trim() : '';
 
       // Warehouse resolution: prefer QC value, fallback to Purchases line warehouse when QC is blank.
       let warehouse = _normalizeUaeWarehouseOrBlank_(qcWarehouseRaw);
@@ -2270,22 +2286,20 @@ function syncQCtoInventory_UAE(opts) {
         warehouse = purchWhByLineId[qcLineId];
       }
 
-      const missingWhTag = 'Missing Warehouse (UAE) - sync skipped';
-
       // Hygiene: clear stale missing-warehouse note tag once warehouse is present (token-safe)
       if (warehouse && qcNotesCol) {
         const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
         const curNote = String(noteCell.getValue() || '');
-        const cleaned = _noteRemoveExactToken_(curNote, missingWhTag);
+        const cleaned = _noteRemoveTokenSafe_(curNote, missingWarehouseTag);
         if (cleaned !== curNote) noteCell.setValue(cleaned);
       }
 
       if (!warehouse) {
-        missingWarehouseRows.push({ qcId: qcId, row: sheetRow });
+        missingWarehouseRows.push({ qcId: stableSourceId, row: sheetRow });
         if (qcNotesCol) {
           const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
           const curNote = String(noteCell.getValue() || '');
-          const withTag = _noteAddToken_(curNote, missingWhTag);
+          const withTag = _noteAddTokenSafe_(curNote, missingWarehouseTag);
           if (withTag !== curNote) noteCell.setValue(withTag);
         }
         skipped++;
@@ -2315,6 +2329,22 @@ function syncQCtoInventory_UAE(opts) {
       if (qtyIn <= 0) return; // skip this QC row
 
       const qcDate = qcDateCol ? row[qcDateCol - 1] : null;
+      const qcDateValid = (qcDate instanceof Date && !isNaN(qcDate.getTime())) ? qcDate : null;
+      if (!qcDateValid) {
+        if (qcNotesCol) {
+          const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
+          const curNote = String(noteCell.getValue() || '');
+          const withTag = _noteAddTokenSafe_(curNote, missingQcDateTag);
+          if (withTag !== curNote) noteCell.setValue(withTag);
+        }
+        skipped++;
+        return;
+      } else if (qcNotesCol) {
+        const noteCell = qcSh.getRange(sheetRow, qcNotesCol);
+        const curNote = String(noteCell.getValue() || '');
+        const cleaned = _noteRemoveTokenSafe_(curNote, missingQcDateTag);
+        if (cleaned !== curNote) noteCell.setValue(cleaned);
+      }
 
       const baseKey = String(orderId) + '||' + String(sku);
       let unitCostEgp = 0;
@@ -2332,7 +2362,7 @@ function syncQCtoInventory_UAE(opts) {
       txns.push({
         type: 'IN',
         sourceType: 'QC_UAE',
-        sourceId: qcId,
+        sourceId: stableSourceId,
         batchCode: batchCode,
         sku: sku,
         productName: product,
@@ -2342,8 +2372,8 @@ function syncQCtoInventory_UAE(opts) {
         unitCostEgp: unitCostEgp,
         currency: currency,            // <-- FIX
         unitPriceOrig: unitPriceOrig,  // <-- FIX
-        txnDate: qcDate || new Date(),
-        notes: 'Imported from QC_UAE (QC ID: ' + qcId + ', row ' + sheetRow + ', Order ' + orderId + ')'
+        txnDate: qcDateValid,
+        notes: 'Imported from QC_UAE (QC ID: ' + stableSourceId + ', row ' + sheetRow + ', Order ' + orderId + ')'
       });
 
       newTxns++;
