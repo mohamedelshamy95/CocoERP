@@ -416,13 +416,32 @@ function updateShipmentsUaeEgStatusAndTotals(opts) {
     const colTotal = map[APP.COLS.SHIP_UAE_EG.TOTAL_COST] ||
       map['Total Cost (EGP)'];
 
+    // Required for status computation
     const requiredCols = [
-      colShipDate, colEta, colArr, colStatus,
-      colQty, colShipCost, colCustoms, colOther, colTotal
+      colShipDate, colEta, colArr, colStatus, colQty
     ];
-
     if (requiredCols.some(function (c) { return !c; })) {
-      throw new Error('Missing one or more required columns in Shipments_UAE_EG.');
+      throw new Error('Missing one or more required columns in Shipments_UAE_EG (status drivers).');
+    }
+
+    // Optional totals columns (warn once if missing)
+    const totalsMissing = (!colShipCost || !colCustoms || !colOther || !colTotal);
+    if (totalsMissing) {
+      try {
+        const dp = PropertiesService.getDocumentProperties();
+        const rlKey = 'CocoERP_RL_updateShipUaeEgTotalsMissing_v1';
+        const now = Date.now();
+        const last = Number(dp.getProperty(rlKey) || 0);
+        const windowMs = 24 * 60 * 60 * 1000;
+        if (!last || (now - last) > windowMs) {
+          logError_(
+            'updateShipmentsUaeEgStatusAndTotals',
+            new Error('Optional cost columns missing; status computed, totals skipped.'),
+            { missingShipCost: !colShipCost, missingCustoms: !colCustoms, missingOther: !colOther, missingTotal: !colTotal }
+          );
+          dp.setProperty(rlKey, String(now));
+        }
+      } catch (e) { }
     }
 
     const lastRow = sh.getLastRow();
@@ -454,14 +473,16 @@ function updateShipmentsUaeEgStatusAndTotals(opts) {
     values.forEach(function (row) {
       // ----- Total Cost -----
       const qty = Number(row[idx.qty] || 0);
-      const shipCostPerUnit = Number(row[idx.shipCost] || 0);
-      const customsPerUnit = Number(row[idx.customs] || 0);
-      const otherPerUnit = Number(row[idx.other] || 0);
+      if (!totalsMissing) {
+        const shipCostPerUnit = Number(row[idx.shipCost] || 0);
+        const customsPerUnit = Number(row[idx.customs] || 0);
+        const otherPerUnit = Number(row[idx.other] || 0);
 
-      // Per-unit semantics: Customs/Other are per-unit; Total Cost = Qty * (Ship + Customs + Other)
-      const extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
-      const totalForShipment = extrasPerUnit * qty;
-      row[idx.total] = totalForShipment;
+        // Per-unit semantics: Customs/Other are per-unit; Total Cost = Qty * (Ship + Customs + Other)
+        const extrasPerUnit = shipCostPerUnit + customsPerUnit + otherPerUnit;
+        const totalForShipment = extrasPerUnit * qty;
+        row[idx.total] = totalForShipment;
+      }
 
       // ----- Status -----
       const ship = row[idx.shipDate];
@@ -488,7 +509,9 @@ function updateShipmentsUaeEgStatusAndTotals(opts) {
     range.setValues(values);
 
     // Ensure number format for Total Cost (EGP)
-    sh.getRange(2, colTotal, numRows, 1).setNumberFormat('0.00');
+    if (colTotal && !totalsMissing) {
+      sh.getRange(2, colTotal, numRows, 1).setNumberFormat('0.00');
+    }
 
     if (interactive && typeof safeAlert_ === 'function') safeAlert_('Shipments_UAE_EG updated (status + totals)');
   } catch (e) {
@@ -810,6 +833,29 @@ function resolveUaeWarehouseFromCourier_(courierRaw) {
   }
   if (s.indexOf('kor') !== -1 || s.indexOf('الكور') !== -1) {
     return 'UAE-KOR';
+  }
+
+  return '';
+}
+
+/**
+ * Strict UAE warehouse resolver for Shipments_UAE_EG:
+ * - Accepts only ATTIA/KOR (with UAE- prefix variants, case-insensitive, or courier hint).
+ * - Unknown/legacy values (UAE-DXB/DUBAI/blank) return '' to block posting.
+ */
+function resolveUaeWarehouseStrict_(rawWh, courierRaw) {
+  const normalizeInput_ = function (v) {
+    return String(v || '').trim().toUpperCase();
+  };
+  const wh = normalizeInput_(rawWh);
+  if (wh === 'KOR' || wh === 'UAE-KOR') return 'KOR';
+  if (wh === 'ATTIA' || wh === 'UAE-ATTIA') return 'ATTIA';
+
+  // Try courier hint only if warehouse cell is empty/unknown.
+  if (!wh) {
+    const c = normalizeInput_(courierRaw);
+    if (c.indexOf('ATTIA') !== -1) return 'ATTIA';
+    if (c.indexOf('KOR') !== -1) return 'KOR';
   }
 
   return '';
@@ -2600,7 +2646,9 @@ function syncShipmentsUaeEgToInventory() {
       let inCount = 0;
       let lineIdsChanged = false;
       let notReadyCount = 0;
-      const notReadySamples = [];
+      let missingShipDateCount = 0;
+      let missingArrivalCount = 0;
+      let missingWarehouseCount = 0;
 
       const txns = [];
 
@@ -2612,6 +2660,21 @@ function syncShipmentsUaeEgToInventory() {
         return null;
       }
 
+      function addTag_(rowArr, idx, tag) {
+        if (idx == null) return;
+        const cur = String(rowArr[idx] || '');
+        rowArr[idx] = _noteAddTokenSafe_(cur, tag);
+      }
+      function removeTag_(rowArr, idx, tag) {
+        if (idx == null) return;
+        const cur = String(rowArr[idx] || '');
+        rowArr[idx] = _noteRemoveTokenSafe_(cur, tag);
+      }
+
+      const blockedShipDateTag = 'SUEG_BLOCKED_NO_SHIPDATE_V1';
+      const blockedArrivalTag = 'SUEG_BLOCKED_NO_ARRIVAL_V1';
+      const blockedWhTag = 'SUEG_BLOCKED_NO_UAE_WAREHOUSE_V1';
+
       shipData.forEach(function (row, idx) {
         const shipmentId = row[idxShipShipmentId];
         const sku = row[idxShipSku];
@@ -2622,15 +2685,7 @@ function syncShipmentsUaeEgToInventory() {
         const qtySynced = Number(row[idxShipQtySynced] || 0);
         const delta = qtyOriginal - qtySynced;
 
-        if (delta === 0) return;
-        if (delta < 0) {
-          logError_(
-            'syncShipmentsUaeEgToInventory',
-            new Error('Negative delta for shipment row (Qty < Qty Synced).'),
-            { shipmentId: shipmentId, sku: sku, qtyOriginal: qtyOriginal, qtySynced: qtySynced }
-          );
-          return;
-        }
+        if (delta <= 0) return;
 
         const sheetRow = idx + 2; // actual row number in sheet
 
@@ -2639,10 +2694,23 @@ function syncShipmentsUaeEgToInventory() {
         const arrDate = toValidDate_(row[idxShipArrival]);
         if (!shipDate || !arrDate) {
           notReadyCount++;
-          if (notReadySamples.length < 5) {
-            notReadySamples.push({ shipmentId: shipmentId, sku: sku, row: sheetRow, shipDate: row[idxShipShipDate], arrival: row[idxShipArrival] });
+          if (!shipDate) {
+            missingShipDateCount++;
+            if (idxShipNotes != null) addTag_(row, idxShipNotes, blockedShipDateTag);
+          } else if (idxShipNotes != null) {
+            removeTag_(row, idxShipNotes, blockedShipDateTag);
+          }
+          if (!arrDate) {
+            missingArrivalCount++;
+            if (idxShipNotes != null) addTag_(row, idxShipNotes, blockedArrivalTag);
+          } else if (idxShipNotes != null) {
+            removeTag_(row, idxShipNotes, blockedArrivalTag);
           }
           return;
+        }
+        if (idxShipNotes != null) {
+          removeTag_(row, idxShipNotes, blockedShipDateTag);
+          removeTag_(row, idxShipNotes, blockedArrivalTag);
         }
 
         // Line discriminator: SKU can repeat within the same Shipment ID (across boxes/rows)
@@ -2681,39 +2749,28 @@ function syncShipmentsUaeEgToInventory() {
         let inExists = existingSourceIds.has(sourceIdIn);
 
         // ===== Determine UAE warehouse for OUT =====
-        let fromWarehouse = '';
-        const whCell = (idxShipWhUae != null) ? normWh_(row[idxShipWhUae]) : '';
+        let fromWarehouse = resolveUaeWarehouseStrict_(idxShipWhUae != null ? row[idxShipWhUae] : '', idxShipCourier != null ? row[idxShipCourier] : '');
 
-        // 1) If sheet has Warehouse (UAE), use it
-        if (whCell) fromWarehouse = whCell;
-
-        // 2) Else infer from courier label (Kor / Attia) if present
-        let courierLabel = (idxShipCourier != null) ? String(row[idxShipCourier] || '').trim() : '';
-        if (!fromWarehouse && courierLabel) {
-          const c = courierLabel.toUpperCase();
-          if (c.indexOf('KOR') >= 0) fromWarehouse = 'KOR';
-          if (c.indexOf('ATTIA') >= 0) fromWarehouse = 'ATTIA';
-        }
-
-        // 3) Else infer from inventory snapshot (first warehouse for SKU)
+        // Fallback to inventory snapshot (strictly filtered)
         if (!fromWarehouse) {
           const invGuess = uaeBySku[sku] || {};
-          if (invGuess.warehouse) fromWarehouse = normWh_(invGuess.warehouse);
+          if (invGuess.warehouse) {
+            fromWarehouse = resolveUaeWarehouseStrict_(invGuess.warehouse, idxShipCourier != null ? row[idxShipCourier] : '');
+          }
         }
 
         if (!fromWarehouse) {
-          logError_(
-            'syncShipmentsUaeEgToInventory',
-            new Error('Cannot determine UAE warehouse for OUT'),
-            { shipmentId: shipmentId, sku: sku, row: sheetRow }
-          );
+          missingWarehouseCount++;
+          if (idxShipNotes != null) addTag_(row, idxShipNotes, blockedWhTag);
           return;
+        } else if (idxShipNotes != null) {
+          removeTag_(row, idxShipNotes, blockedWhTag);
         }
 
         // If Warehouse (UAE) is empty in sheet and inventory has a warehouse → fill it (user convenience).
         const keyWhInfo = String(sku) + '||' + String(fromWarehouse);
         const info = uaeByWh[keyWhInfo] || uaeBySku[sku] || {};
-        if (idxShipWhUae != null && !whCell && info.warehouse) {
+        if (idxShipWhUae != null && (!row[idxShipWhUae] || String(row[idxShipWhUae]).trim() === '') && info.warehouse) {
           row[idxShipWhUae] = info.warehouse;
         }
 
@@ -2810,10 +2867,7 @@ function syncShipmentsUaeEgToInventory() {
           (idxShipVariant != null ? row[idxShipVariant] : '') ||
           '';
 
-        const toWarehouseRaw = (APP.WAREHOUSES && (APP.WAREHOUSES.EG_TAN || APP.WAREHOUSES.TAN_GH))
-          ? (APP.WAREHOUSES.EG_TAN || APP.WAREHOUSES.TAN_GH)
-          : 'EG-TAN';
-        const toWarehouse = normWh_(toWarehouseRaw);
+        const toWarehouse = 'EG-TAN';
 
         // Txn-ID based dedupe (covers legacy Source ID scheme and prevents duplicates across code revisions)
         const outTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
@@ -2956,7 +3010,7 @@ function syncShipmentsUaeEgToInventory() {
             logError_(
               'syncShipmentsUaeEgToInventory.notReady',
               new Error('Shipments_UAE_EG rows skipped because Ship Date and/or Actual Arrival is missing.'),
-              { count: notReadyCount, samples: notReadySamples }
+              { count: notReadyCount, missingShipDate: missingShipDateCount, missingArrival: missingArrivalCount }
             );
             dp.setProperty(rlKey, String(now));
           } else {

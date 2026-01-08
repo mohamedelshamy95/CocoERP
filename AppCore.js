@@ -1648,6 +1648,7 @@ function coco_hasPendingShipUaeEgInventorySync_() {
   const cQty = map[APP.COLS.SHIP_UAE_EG.QTY] || map['Qty'];
   const cShipDate = map[APP.COLS.SHIP_UAE_EG.SHIP_DATE] || map['Ship Date'] || map['Ship Date (UAE)'];
   const cArrival = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] || map['Actual Arrival'] || map['Actual Arrival (EG)'];
+  const cWh = map[APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE] || map['Warehouse (UAE)'];
   const cSynced = map[APP.COLS.SHIP_UAE_EG.QTY_SYNCED] || map['Qty Synced'];
 
   if (!cShipId || !cSku || !cQty || !cShipDate || !cArrival) return false;
@@ -1662,6 +1663,14 @@ function coco_hasPendingShipUaeEgInventorySync_() {
   const synceds = cSynced ? sh.getRange(2, cSynced, n, 1).getValues() : null;
   const shipDates = sh.getRange(2, cShipDate, n, 1).getValues();
   const arrivals = sh.getRange(2, cArrival, n, 1).getValues();
+  const whs = cWh ? sh.getRange(2, cWh, n, 1).getValues() : null;
+
+  const resolveStrictWh_ = function (val) {
+    const s = String(val || '').trim().toUpperCase();
+    if (s === 'KOR' || s === 'UAE-KOR') return 'KOR';
+    if (s === 'ATTIA' || s === 'UAE-ATTIA') return 'ATTIA';
+    return '';
+  };
 
   for (let i = 0; i < n; i++) {
     const sid = String(shipIds[i][0] || '').trim();
@@ -1670,8 +1679,10 @@ function coco_hasPendingShipUaeEgInventorySync_() {
     const synced = synceds ? Number(synceds[i][0] || 0) : 0;
     const shipDateVal = shipDates ? shipDates[i][0] : '';
     const arrivalVal = arrivals ? arrivals[i][0] : '';
+    const whVal = whs ? whs[i][0] : '';
+    const whNorm = cWh ? resolveStrictWh_(whVal) : 'KOR'; // if no warehouse column, treat as OK
 
-    if (sid && sku && qty > synced && shipDateVal && arrivalVal) return true;
+    if (sid && sku && qty > synced && shipDateVal && arrivalVal && whNorm) return true;
   }
   return false;
 }
