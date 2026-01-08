@@ -1,0 +1,281 @@
+diff --git a/AppCore.js b/AppCore.js
+--- a/AppCore.js
++++ b/AppCore.js
+@@ -181,6 +181,8 @@
+       ETA: 'ETA',
+       ARRIVAL: 'Actual Arrival',
+       STATUS: 'Status',
++      WAREHOUSE_UAE: 'Warehouse (UAE)',
+       SKU: 'SKU',
+       PRODUCT_NAME: 'Product Name',
+       VARIANT: 'Variant / Color',
+       QTY: 'Qty',
+       QTY_SYNCED: 'Qty Synced',
+       SHIP_COST: 'Ship Cost (EGP) – per unit or box',
+       CUSTOMS: 'Customs (EGP)',
+       OTHER: 'Other (EGP)',
+       TOTAL_COST: 'Total Cost (EGP)',
++      LINE_ID: 'Line ID',
+       NOTES: 'Notes'
+     }
+   }
+@@ -617,11 +619,13 @@
+ }
+
+ /* eslint-disable no-restricted-properties */
+-function tryGetUi_() {
+-  try {
+-    return SpreadsheetApp.getUi();
+-  } catch (_e) {
+-    // Trigger contexts can't access UI
+-    return null;
+-  }
+-}
++/**
++ * UI access is ONLY allowed when explicitly requested from a manual menu action.
++ * Never call SpreadsheetApp.getUi() from automation/trigger/queue paths.
++ */
++function getUiIfAllowed_(opts) {
++  if (!opts || opts.ui !== true) return null;
++  return SpreadsheetApp.getUi();
++}
+ /* eslint-enable no-restricted-properties */
+
+-function safeAlert_(msg, title) {
++function safeAlert_(msg, title, opts) {
+   try {
+-    const ui = tryGetUi_();
++    const ui = getUiIfAllowed_(opts);
+     if (ui) {
+       ui.alert(title ? String(title) : 'CocoERP', String(msg || ''));
+     } else {
+       Logger.log((title ? '[' + title + '] ' : '') + String(msg || ''));
+     }
+   } catch (e) {
+     Logger.log('ALERT FAILED: ' + (e && e.message ? e.message : e));
+   }
+ }
+
+-function safeConfirm_(title, msg) {
+-  const ui = tryGetUi_();
++function safeConfirm_(title, msg, opts) {
++  const ui = getUiIfAllowed_(opts);
+   if (!ui) {
+     Logger.log('CONFIRM SKIPPED (no UI): ' + String(title || '') + ' :: ' + String(msg || ''));
+     return false;
+   }
+   const res = ui.alert(String(title || 'Confirm'), String(msg || ''), ui.ButtonSet.YES_NO);
+   return res === ui.Button.YES;
+ }
+
+-function safePromptText_(title, msg, defaultValue) {
+-  const ui = tryGetUi_();
++function safePromptText_(title, msg, defaultValue, opts) {
++  const ui = getUiIfAllowed_(opts);
+   if (!ui) {
+     Logger.log('PROMPT SKIPPED (no UI): ' + String(title || '') + ' :: ' + String(msg || ''));
+     return null;
+   }
+   const res = ui.prompt(String(title || 'Input'), String(msg || ''), ui.ButtonSet.OK_CANCEL);
+diff --git a/Logistics.js b/Logistics.js
+--- a/Logistics.js
++++ b/Logistics.js
+@@ -78,6 +78,8 @@
+   APP.COLS.SHIP_UAE_EG.CUSTOMS,
+   APP.COLS.SHIP_UAE_EG.OTHER,
+   APP.COLS.SHIP_UAE_EG.TOTAL_COST,
++
++  APP.COLS.SHIP_UAE_EG.LINE_ID,
+
+   APP.COLS.PURCHASES.NOTES
+ ];
+diff --git a/InventoryCore.js b/InventoryCore.js
+--- a/InventoryCore.js
++++ b/InventoryCore.js
+@@ -861,7 +861,13 @@
+
+     // Optional: seed UAE→EG planning rows after snapshots rebuild
+     if (typeof seedShipmentsUaeEgFromInventoryUae === 'function') {
+-      seedShipmentsUaeEgFromInventoryUae();
++      try {
++        seedShipmentsUaeEgFromInventoryUae();
++      } catch (e) {
++        logError_('inv_rebuildAllSnapshots.seedShipmentsUaeEgFromInventoryUae', e);
++        // Non-fatal: inventory snapshots should still be considered rebuilt.
++      }
+     }
+
+     if (typeof safeAlert_ === 'function') {
+       safeAlert_('Inventory snapshots rebuilt (UAE + EG).');
+diff --git a/Orders.js b/Orders.js
+--- a/Orders.js
++++ b/Orders.js
+@@ -89,7 +89,7 @@
+
+     const shO = orders_ensureSheet_(APP.SHEETS.ORDERS);
+     // Manual confirmation only (safe in triggers/editor: returns false)
+-    if (!safeConfirm_('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟')) return;
++    if (!safeConfirm_('تحذير', 'ده هيمسح Orders بالكامل. متأكد؟', { ui: true })) return;
+
+     orders_removeFilterIfAny_(shO);
+     shO.clear();
+diff --git a/Purchases.js b/Purchases.js
+--- a/Purchases.js
++++ b/Purchases.js
+@@ -356,7 +356,7 @@
+     ensureErrorLog_();
+
+     const sh = getSheet_(APP.SHEETS.PURCHASES);
+-    if (!safeConfirm_('تحذير', 'ده هيمسح Purchases و Settings بالكامل. متأكد؟')) return;
++    if (!safeConfirm_('تحذير', 'ده هيمسح Purchases و Settings بالكامل. متأكد؟', { ui: true })) return;
+
+     sh.clear();
+     sh.setFrozenRows(1);
+diff --git a/ShipmentsCore.js b/ShipmentsCore.js
+--- a/ShipmentsCore.js
++++ b/ShipmentsCore.js
+@@ -1012,6 +1012,17 @@
+
+     const invSh = getSheet_(APP.SHEETS.INVENTORY_UAE);
+     const shipSh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
++
++    // Repair known blank header (Status → Warehouse (UAE)) and ensure required schema additions (e.g., Line ID).
++    try {
++      if (typeof SHIP_UAE_EG_HEADERS !== 'undefined') {
++        repairBlankHeadersByPosition_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, 1);
++        ensureSheetSchema_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, { addMissing: true });
++      }
++    } catch (e) {
++      logError_('seedShipmentsUaeEgFromInventoryUae.preflight', e);
++    }
+
+     const invMap = getHeaderMap_(invSh);
+     const shipMap = getHeaderMap_(shipSh);
+@@ -1036,9 +1047,17 @@
+
+     if (!invSkuCol || !invWhCol) throw new Error('Inventory_UAE missing required headers (SKU/Warehouse).');
+     if (!shipIdCol || !shipWhCol || !shipSkuCol) {
+-      throw new Error('Shipments_UAE_EG missing required headers (Shipment ID / Warehouse (UAE) / SKU). Run Setup Shipments Layouts.');
++      const err = new Error('Shipments_UAE_EG missing required headers (Shipment ID / Warehouse (UAE) / SKU). Run Setup Shipments Layouts.');
++      logError_('seedShipmentsUaeEgFromInventoryUae', err, {
++        hasShipmentId: !!shipIdCol,
++        hasWarehouseUAE: !!shipWhCol,
++        hasSku: !!shipSkuCol
++      });
++      return; // non-fatal: allow snapshot rebuild to continue
+     }
+
+@@ -1352,13 +1371,17 @@
+   try {
+     const orderIdFilter = (typeof safePromptText_ === 'function')
+       ? safePromptText_(
+         'Generate QC_UAE',
+-        'Optional: Enter a single Order ID to generate QC only for that order.\n\nLeave empty to generate QC for all eligible orders.'
++        'Optional: Enter a single Order ID to generate QC only for that order.\n\nLeave empty to generate QC for all eligible orders.',
++        '',
++        { ui: true }
+       )
+       : null;
+     if (orderIdFilter === null) return;
+     qc_generateFromPurchases_(orderIdFilter || null);
+-    if (typeof safeAlert_ === 'function') safeAlert_('QC_UAE generation triggered.');
++    if (typeof safeAlert_ === 'function') safeAlert_('QC_UAE generation triggered.', null, { ui: true });
+   } catch (err) {
+     logError_('qc_generateFromPurchasesPrompt', err);
+     throw err;
+   }
+ }
+@@ -2206,6 +2229,17 @@
+     const runner_ = function () {
+       const shipSh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+       const invUaeSh = getSheet_(APP.SHEETS.INVENTORY_UAE);
+       const ledgerSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
++
++      // Repair known blank header (Status → Warehouse (UAE)) in-place and ensure persistent Line ID column exists.
++      try {
++        if (typeof SHIP_UAE_EG_HEADERS !== 'undefined') {
++          repairBlankHeadersByPosition_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, 1);
++          ensureSheetSchema_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, { addMissing: true });
++        }
++      } catch (e) {
++        logError_('syncShipmentsUaeEgToInventory.preflight', e);
++      }
+
+       const shipMap = getHeaderMap_(shipSh);
+       const invUaeMap = getHeaderMap_(invUaeSh);
+@@ -2271,10 +2305,12 @@
+       const idxShipVariant = shipMap['Variant / Color'] ? shipMap['Variant / Color'] - 1 : null;
+
+       const colBoxId = shipMap[APP.COLS.SHIP_UAE_EG.BOX_ID] || shipMap['Box ID'];
+       const idxShipBoxId = colBoxId ? colBoxId - 1 : null;
++      const colLineId = shipMap[APP.COLS.SHIP_UAE_EG.LINE_ID] || shipMap['Line ID'];
++      const idxShipLineId = colLineId ? colLineId - 1 : null;
+
+       const colCourier = shipMap['Courier'] || shipMap['Courier Name'];
+       const idxShipCourier = colCourier ? colCourier - 1 : null;
+
+-      const colShipWhUae = shipMap['Warehouse (UAE)'];
++      const colShipWhUae = shipMap[APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE] || shipMap['Warehouse (UAE)'];
+       const idxShipWhUae = colShipWhUae ? colShipWhUae - 1 : null;
+
+       const lastShipRow = shipSh.getLastRow();
+@@ -2324,6 +2360,7 @@
+
+       let outCount = 0;
+       let inCount = 0;
++      let lineIdsChanged = false;
+
+       const txns = [];
+
+@@ -2349,11 +2386,34 @@
+         const shipmentId = String(row[idxShipId] || '').trim();
+         const status = idxShipStatus != null ? String(row[idxShipStatus] || '').trim() : '';
+         const sku = String(row[idxShipSku] || '').trim();
+
+-        const sheetRow = idx + 2; // actual row number in sheet
++        const sheetRow = idx + 2; // actual row number in sheet (for logs only)
+
+         // Line discriminator: SKU can repeat within the same Shipment ID (across boxes/rows)
++        // Policy: Box ID first; if Box ID is empty use a persistent per-row Line ID (never sheet row number, since sorting/filtering occurs).
+         const boxId = (idxShipBoxId != null) ? String(row[idxShipBoxId] || '').trim() : '';
+         const vKey = (idxShipVariant != null) ? String(row[idxShipVariant] || '').trim() : '';
+-        const lineDiscriminator = boxId ? ('B' + boxId) : ('R' + sheetRow);
++
++        let lineId = '';
++        if (!boxId) {
++          if (idxShipLineId == null) {
++            logError_('syncShipmentsUaeEgToInventory', new Error('Missing Line ID column in Shipments_UAE_EG (required when Box ID is empty).'), {
++              shipmentId: shipmentId,
++              sku: sku,
++              row: sheetRow
++            });
++            return;
++          }
++          lineId = String(row[idxShipLineId] || '').trim();
++          if (!lineId) {
++            lineId = 'L-' + Utilities.getUuid();
++            row[idxShipLineId] = lineId;
++            lineIdsChanged = true;
++          }
++        }
++        const lineDiscriminator = boxId ? ('B' + boxId) : ('L' + lineId);
+
+         // Operation key encodes the pre-sync Qty Synced and the delta, so retries don't duplicate
+         const baseKey = `SUEG|${shipmentId}|${lineDiscriminator}|${sku}|${vKey}|S${qtySynced}|D${delta}`;
+         const sourceIdOut = `${baseKey}|OUT`;
+         const sourceIdIn = `${baseKey}|IN`;
+@@ -2608,6 +2668,14 @@
+         row[idxShipQtySynced] = qtyCurrent;
+       });
+
++      // Persist any newly generated Line IDs BEFORE writing ledger rows (crash-safety for idempotency).
++      if (lineIdsChanged && colLineId && idxShipLineId != null && shipData.length) {
++        shipSh.getRange(2, colLineId, shipData.length, 1).setValues(shipData.map(function (r) {
++          return [r[idxShipLineId] || ''];
++        }));
++      }
++
+       // Write txns in one batch (faster + one lock)
+       if (txns.length) {
+         if (typeof logInventoryTxnBatch_ === 'function') {
+           logInventoryTxnBatch_(txns);

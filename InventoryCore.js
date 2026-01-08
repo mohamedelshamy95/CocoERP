@@ -30,6 +30,9 @@ const INV_TXN_HEADERS = [
 // true  = keep rows even if On Hand Qty = 0 and Total Cost = 0
 const INV_SNAPSHOT_KEEP_ZERO = false;
 
+// Money tolerance used for snapshot invariants (EGP). Helps clamp float noise.
+const INV_VALUE_TOL_EGP = 0.05;
+
 // Snapshot: مخزون الإمارات
 const INV_UAE_HEADERS = [
   'SKU',
@@ -75,7 +78,9 @@ function setupInventoryCoreLayout() {
     setupInventorySnapshotUAE_();
     setupInventorySnapshotEG_();
 
-    SpreadsheetApp.getUi().alert(
+    if (typeof safeAlert_ === 'function') safeAlert_(
+      'تم تجهيز Inventory_Transactions و Inventory_UAE و Inventory_EG ✔️'
+    ); else Logger.log(
       'تم تجهيز Inventory_Transactions و Inventory_UAE و Inventory_EG ✔️'
     );
   } catch (e) {
@@ -89,13 +94,13 @@ function setupInventoryLedger_() {
   const ledgerSh = (typeof ensureSheet_ === 'function')
     ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS)
     : ((typeof getOrCreateSheet_ === 'function')
-        ? getOrCreateSheet_(APP.SHEETS.INVENTORY_TXNS)
-        : getSheet_(APP.SHEETS.INVENTORY_TXNS));
+      ? getOrCreateSheet_(APP.SHEETS.INVENTORY_TXNS)
+      : getSheet_(APP.SHEETS.INVENTORY_TXNS));
 
   _setupSheetWithHeaders_(ledgerSh, INV_TXN_HEADERS);
 
   // Self-heal common drift (e.g., legacy "Warehouse (EG)" + extra "Warehouse")
-  try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) {}
+  try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
 
   const map = getHeaderMap_(ledgerSh);
   _applyDateFormat_(ledgerSh, map[APP.COLS.INV_TXNS.TXN_DATE]);
@@ -136,7 +141,7 @@ function inv_repairInventoryTransactionsHeaders() {
 
     inv_repairInventoryTransactionsHeaders_(ledgerSh);
 
-    SpreadsheetApp.getUi().alert('Inventory_Transactions headers repaired ✔️');
+    if (typeof safeAlert_ === 'function') safeAlert_('Inventory_Transactions headers repaired ✔️'); else Logger.log('Inventory_Transactions headers repaired ✔️');
   } catch (e) {
     logError_('inv_repairInventoryTransactionsHeaders', e);
     throw e;
@@ -219,8 +224,8 @@ function setupInventorySnapshotUAE_() {
   const uaeInvSh = (typeof ensureSheet_ === 'function')
     ? ensureSheet_(APP.SHEETS.INVENTORY_UAE)
     : ((typeof getOrCreateSheet_ === 'function')
-        ? getOrCreateSheet_(APP.SHEETS.INVENTORY_UAE)
-        : getSheet_(APP.SHEETS.INVENTORY_UAE));
+      ? getOrCreateSheet_(APP.SHEETS.INVENTORY_UAE)
+      : getSheet_(APP.SHEETS.INVENTORY_UAE));
 
   _setupSheetWithHeaders_(uaeInvSh, INV_UAE_HEADERS);
 
@@ -242,8 +247,8 @@ function setupInventorySnapshotEG_() {
   const egInvSh = (typeof ensureSheet_ === 'function')
     ? ensureSheet_(APP.SHEETS.INVENTORY_EG)
     : ((typeof getOrCreateSheet_ === 'function')
-        ? getOrCreateSheet_(APP.SHEETS.INVENTORY_EG)
-        : getSheet_(APP.SHEETS.INVENTORY_EG));
+      ? getOrCreateSheet_(APP.SHEETS.INVENTORY_EG)
+      : getSheet_(APP.SHEETS.INVENTORY_EG));
 
   _setupSheetWithHeaders_(egInvSh, INV_EG_HEADERS);
 
@@ -373,38 +378,38 @@ function logInventoryTxnBatch_(payloads, opts) {
   const ledgerSh = options.ledgerSheet || ((typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS));
 
   // Ensure ledger schema exists (non-destructive)
-  try { normalizeHeaders_(ledgerSh, 1); } catch (e) {}
+  try { normalizeHeaders_(ledgerSh, 1); } catch (e) { }
   try {
     if (typeof ensureSheetSchema_ === 'function') {
       ensureSheetSchema_(APP.SHEETS.INVENTORY_TXNS, INV_TXN_HEADERS, { addMissing: true, headerRow: 1 });
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const headers = options.headers || INV_TXN_HEADERS;
 
   // Map payload keys by header label (canonical)
   const keyByHeader = {};
-  keyByHeader[APP.COLS.INV_TXNS.TXN_DATE]    = 'txnDate';
-  keyByHeader[APP.COLS.INV_TXNS.TYPE]        = 'type';
+  keyByHeader[APP.COLS.INV_TXNS.TXN_ID] = 'txnId';
+  keyByHeader[APP.COLS.INV_TXNS.TXN_DATE] = 'txnDate';
   keyByHeader[APP.COLS.INV_TXNS.SOURCE_TYPE] = 'sourceType';
-  keyByHeader[APP.COLS.INV_TXNS.SOURCE_ID]   = 'sourceId';
-  keyByHeader[APP.COLS.INV_TXNS.BATCH_CODE]  = 'batchCode';
-  keyByHeader[APP.COLS.INV_TXNS.SKU]         = 'sku';
-  keyByHeader[APP.COLS.INV_TXNS.PRODUCT_NAME]= 'productName';
-  keyByHeader[APP.COLS.INV_TXNS.VARIANT]     = 'variant';
-  keyByHeader[APP.COLS.INV_TXNS.WAREHOUSE]   = 'warehouse';
-  keyByHeader[APP.COLS.INV_TXNS.QTY_IN]      = 'qtyIn';
-  keyByHeader[APP.COLS.INV_TXNS.QTY_OUT]     = 'qtyOut';
-  keyByHeader[APP.COLS.INV_TXNS.UNIT_COST]      = 'unitCostEgp';
-  keyByHeader[APP.COLS.INV_TXNS.TOTAL_COST]     = 'totalCostEgp';
-  keyByHeader[APP.COLS.INV_TXNS.CURRENCY]      = 'currency';
-  keyByHeader[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG]= 'unitPriceOrig';
-  keyByHeader[APP.COLS.INV_TXNS.NOTES]         = 'notes';
+  keyByHeader[APP.COLS.INV_TXNS.SOURCE_ID] = 'sourceId';
+  keyByHeader[APP.COLS.INV_TXNS.BATCH_CODE] = 'batchCode';
+  keyByHeader[APP.COLS.INV_TXNS.SKU] = 'sku';
+  keyByHeader[APP.COLS.INV_TXNS.PRODUCT_NAME] = 'productName';
+  keyByHeader[APP.COLS.INV_TXNS.VARIANT] = 'variant';
+  keyByHeader[APP.COLS.INV_TXNS.WAREHOUSE] = 'warehouse';
+  keyByHeader[APP.COLS.INV_TXNS.QTY_IN] = 'qtyIn';
+  keyByHeader[APP.COLS.INV_TXNS.QTY_OUT] = 'qtyOut';
+  keyByHeader[APP.COLS.INV_TXNS.UNIT_COST] = 'unitCostEgp';
+  keyByHeader[APP.COLS.INV_TXNS.TOTAL_COST] = 'totalCostEgp';
+  keyByHeader[APP.COLS.INV_TXNS.CURRENCY] = 'currency';
+  keyByHeader[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG] = 'unitPriceOrig';
+  keyByHeader[APP.COLS.INV_TXNS.NOTES] = 'notes';
 
   // Normalize payload -> ledger row
   function buildRow_(p) {
     const type = String(p.type || '').toUpperCase().trim();
-    const qty  = Number(p.qty || 0);
+    const qty = Number(p.qty || 0);
 
     const txnDate = p.txnDate ? new Date(p.txnDate) : new Date();
     const wh = (typeof normalizeWarehouseCode_ === 'function')
@@ -430,6 +435,9 @@ function logInventoryTxnBatch_(payloads, opts) {
       notes: p.notes || ''
     };
 
+    // Ensure Txn ID is always populated (unless explicitly provided)
+    out.txnId = p.txnId || _inv_makeTxnId_(out);
+
     if (!out.sku) throw new Error('logInventoryTxnBatch_: missing SKU');
     if (!out.warehouse) throw new Error('logInventoryTxnBatch_: missing warehouse');
     if (!qty || qty <= 0) throw new Error('logInventoryTxnBatch_: invalid qty for SKU ' + out.sku);
@@ -442,6 +450,11 @@ function logInventoryTxnBatch_(payloads, opts) {
     if (!out.totalCostEgp) {
       const basisQty = (type === 'IN') ? out.qtyIn : out.qtyOut;
       out.totalCostEgp = out.unitCostEgp ? (out.unitCostEgp * basisQty) : 0;
+    }
+
+    // Deterministic Txn ID (used for debugging + optional dedupe)
+    if (!out.txnId) {
+      out.txnId = out.txnId || (typeof _inv_makeTxnId_ === 'function' ? _inv_makeTxnId_(out) : '');
     }
 
     return headers.map(function (h) {
@@ -459,9 +472,39 @@ function logInventoryTxnBatch_(payloads, opts) {
   const CHUNK = 500;
 
   const write_ = function () {
+    if (!rows.length) return 0;
+
+    // Idempotency: dedupe by stable Txn ID
+    const map = getHeaderMap_(ledgerSh);
+    const txnIdCol = map[APP.COLS.INV_TXNS.TXN_ID] || map['Txn ID'];
+    const existing = new Set();
+
+    if (txnIdCol) {
+      const lr = ledgerSh.getLastRow();
+      if (lr >= 2) {
+        const vals = ledgerSh.getRange(2, txnIdCol, lr - 1, 1).getValues();
+        for (let i = 0; i < vals.length; i++) {
+          const v = String(vals[i][0] || '').trim();
+          if (v) existing.add(v);
+        }
+      }
+    }
+
+    const seen = new Set();
+    const toWrite = [];
+
+    // Txn ID is the first column in INV_TXN_HEADERS
+    for (const r of rows) {
+      const id = String(r[0] || '').trim();
+      if (!id) continue;
+      if (existing.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      toWrite.push(r);
+    }
+
     let appended = 0;
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const chunk = rows.slice(i, i + CHUNK);
+    for (let i = 0; i < toWrite.length; i += CHUNK) {
+      const chunk = toWrite.slice(i, i + CHUNK);
       const start = ledgerSh.getLastRow() + 1;
       ledgerSh.getRange(start, 1, chunk.length, headers.length).setValues(chunk);
       appended += chunk.length;
@@ -546,67 +589,84 @@ function _inv_isEgWarehouse_(wh) {
 
 function rebuildInventoryUAEFromLedger() {
   try {
-    const ledgerSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS);
-    const invSh    = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_UAE) : getSheet_(APP.SHEETS.INVENTORY_UAE);
+    const tol = (typeof INV_VALUE_TOL_EGP === 'number') ? INV_VALUE_TOL_EGP : 0.05;
+
+    const ledgerSh = (typeof ensureSheet_ === 'function')
+      ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS)
+      : getSheet_(APP.SHEETS.INVENTORY_TXNS);
+
+    const invSh = (typeof ensureSheet_ === 'function')
+      ? ensureSheet_(APP.SHEETS.INVENTORY_UAE)
+      : getSheet_(APP.SHEETS.INVENTORY_UAE);
 
     // Self-heal common ledger header drift (Warehouse duplicates)
-    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) {}
+    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
 
     const ledgerMap = getHeaderMap_(ledgerSh);
-    const invMap    = getHeaderMap_(invSh);
+    const invMap = getHeaderMap_(invSh);
 
     const lastRow = ledgerSh.getLastRow();
 
-    // لو مفيش حركات → امسح Snapshot وخلاص
+    // No ledger rows → clear snapshot
     if (lastRow < 2) {
       if (invSh.getLastRow() > 1) {
-        invSh
-          .getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn())
-          .clearContent();
+        invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
       }
       return;
     }
 
-    const data = ledgerSh
-      .getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn())
-      .getValues();
+    const data = ledgerSh.getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn()).getValues();
 
-    const idxSku       = ledgerMap[APP.COLS.INV_TXNS.SKU]          - 1;
-    const idxWh        = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE]    - 1;
-    const idxProduct   = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
-    const idxVariant   = ledgerMap[APP.COLS.INV_TXNS.VARIANT]      - 1;
-    const idxQtyIn     = ledgerMap[APP.COLS.INV_TXNS.QTY_IN]       - 1;
-    const idxQtyOut    = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT]      - 1;
-    const idxUnitCost  = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST]    - 1;
-    const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST]   - 1;
-    const idxTxnDate   = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE]     - 1;
-    const idxSrcType   = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE]  - 1;
-    const idxSrcId     = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID]    - 1;
+    const idxSku = (ledgerMap[APP.COLS.INV_TXNS.SKU] || ledgerMap['SKU']) - 1;
+    const idxWh = (ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] || ledgerMap['Warehouse']) - 1;
+    const idxProduct = (ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] || ledgerMap['Product Name']) - 1;
+    const idxVariant = (ledgerMap[APP.COLS.INV_TXNS.VARIANT] || ledgerMap['Variant / Color']) - 1;
+    const idxQtyIn = (ledgerMap[APP.COLS.INV_TXNS.QTY_IN] || ledgerMap['Qty In']) - 1;
+    const idxQtyOut = (ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] || ledgerMap['Qty Out']) - 1;
+    const idxUnitCost = (ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] || ledgerMap['Unit Cost (EGP)']) - 1;
+    const idxTotalCost = (ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] || ledgerMap['Total Cost (EGP)']) - 1;
+    const idxTxnDate = (ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] || ledgerMap['Txn Date']) - 1;
+    const idxSrcType = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type']) - 1;
+    const idxSrcId = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID']) - 1;
 
-    // تجميع حسب (SKU + Warehouse + Variant) لمخازن الإمارات فقط
+    // Aggregate by (SKU + Warehouse + Variant) for UAE warehouses only
     const keyMap = {};
+
     data.forEach(function (row) {
       const sku = row[idxSku];
       if (!sku) return;
 
-      const whRaw = row[idxWh];
-      const wh    = (whRaw || '').toString().trim();
+      let wh = (row[idxWh] || '').toString().trim();
       if (!wh) return;
 
-      const whUpper = wh.toUpperCase();
-      if (!_inv_isUaeWarehouse_(wh)) { return; }
+      if (typeof normalizeWarehouseCode_ === 'function') {
+        wh = normalizeWarehouseCode_(wh);
+      }
+      wh = String(wh || '').trim();
 
-      const product   = row[idxProduct];
-      const variant   = row[idxVariant];
-      const qtyIn     = Number(row[idxQtyIn]  || 0);
-      const qtyOut    = Number(row[idxQtyOut] || 0);
-      const unitCost  = Number(row[idxUnitCost] || 0);
-      const totalCost = Number(row[idxTotalCost] || 0) || unitCost * qtyIn;
-      const txnDate   = row[idxTxnDate];
-      const srcType   = row[idxSrcType];
-      const srcId     = row[idxSrcId];
+      if (!_inv_isUaeWarehouse_(wh)) return;
 
-      const key = sku + '||' + wh + '||' + (variant || '');
+      const qtyIn = Number(row[idxQtyIn] || 0);
+      const qtyOut = Number(row[idxQtyOut] || 0);
+      if (qtyIn === 0 && qtyOut === 0) return;
+
+      const product = row[idxProduct];
+      const variant = row[idxVariant];
+
+      const unitCost = Number(row[idxUnitCost] || 0);
+      const totalCostCell = Number(row[idxTotalCost] || 0);
+
+      // Signed valuation model:
+      // - IN value adds
+      // - OUT value subtracts
+      const valIn = (qtyIn > 0) ? (totalCostCell || (unitCost * qtyIn)) : 0;
+      const valOut = (qtyOut > 0) ? (totalCostCell || (unitCost * qtyOut)) : 0;
+
+      const txnDate = row[idxTxnDate];
+      const srcType = row[idxSrcType];
+      const srcId = row[idxSrcId];
+
+      const key = String(sku) + '||' + String(wh) + '||' + String(variant || '');
 
       if (!keyMap[key]) {
         keyMap[key] = {
@@ -623,78 +683,136 @@ function rebuildInventoryUAEFromLedger() {
       }
 
       const rec = keyMap[key];
-      rec.onHand    += qtyIn - qtyOut;
-      rec.totalCost += totalCost;
+      rec.onHand += (qtyIn - qtyOut);
+      rec.totalCost += (valIn - valOut);
 
       if (txnDate && (!rec.lastDate || txnDate > rec.lastDate)) {
-        rec.lastDate       = txnDate;
+        rec.lastDate = txnDate;
         rec.lastSourceType = srcType || '';
-        rec.lastSourceId   = srcId || '';
+        rec.lastSourceId = srcId || '';
       }
     });
 
-    // امسح Snapshot القديم
+    // Clear snapshot
     if (invSh.getLastRow() > 1) {
-      invSh
-        .getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn())
-        .clearContent();
+      invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
     }
 
     const invHeaders = Object.keys(invMap).sort(function (a, b) {
       return invMap[a] - invMap[b];
     });
+
     const rows = [];
 
     Object.keys(keyMap).forEach(function (key) {
       const r = keyMap[key];
 
-      if (!INV_SNAPSHOT_KEEP_ZERO && !r.onHand && !r.totalCost) return;
+      // Clamp float noise
+      if (Math.abs(r.onHand) < 1e-9) r.onHand = 0;
+      if (Math.abs(r.totalCost) < tol) r.totalCost = 0;
 
-      const avgCost = r.onHand ? r.totalCost / r.onHand : 0;
+      // Overship / negative on-hand: log + clamp to safe zero to avoid poisoning avg cost.
+      if (r.onHand < 0) {
+        try {
+          logError_('rebuildInventoryUAEFromLedger', new Error('Negative On Hand Qty detected (overship). Snapshot clamped to 0/0.'), {
+            sku: r.sku,
+            variant: r.variant,
+            warehouse: r.warehouse,
+            onHand: r.onHand,
+            totalCost: r.totalCost
+          });
+        } catch (e) { }
+        r.onHand = 0;
+        r.totalCost = 0;
+      }
 
-      const rowObj = {};
-      rowObj['SKU']              = r.sku;
-      rowObj['Product Name']     = r.product;
-      rowObj['Variant / Color']  = r.variant;
-      rowObj['Warehouse (UAE)']  = r.warehouse;
-      rowObj['On Hand Qty']      = r.onHand;
-      rowObj['Allocated Qty']    = 0;
-      rowObj['Available Qty']    = r.onHand;
-      rowObj['Avg Cost (EGP)']   = avgCost;
-      rowObj['Total Cost (EGP)'] = r.totalCost;
-      rowObj['Last Txn Date']    = r.lastDate;
-      rowObj['Last Source Type'] = r.lastSourceType;
-      rowObj['Last Source ID']   = r.lastSourceId;
+      // Critical invariant: Qty==0 ⇒ Value==0 (prevents “qty clamps but value doesn’t”).
+      if (r.onHand === 0) {
+        if (Math.abs(r.totalCost) > tol) {
+          try {
+            logError_('rebuildInventoryUAEFromLedger', new Error('Invariant violation: On Hand Qty is 0 but Total Cost is non-zero. Clamped to 0.'), {
+              sku: r.sku,
+              variant: r.variant,
+              warehouse: r.warehouse,
+              totalCost: r.totalCost
+            });
+          } catch (e) { }
+        }
+        r.totalCost = 0;
+      }
 
-      const rowArr = invHeaders.map(function (h) {
-        return rowObj[h] !== undefined ? rowObj[h] : '';
-      });
-      rows.push(rowArr);
+      // Negative valuation (beyond tolerance) is invalid → log + clamp.
+      if (r.totalCost < -tol) {
+        try {
+          logError_('rebuildInventoryUAEFromLedger', new Error('Negative Total Cost detected. Snapshot Total Cost clamped to 0.'), {
+            sku: r.sku,
+            variant: r.variant,
+            warehouse: r.warehouse,
+            onHand: r.onHand,
+            totalCost: r.totalCost
+          });
+        } catch (e) { }
+        r.totalCost = 0;
+      } else if (r.totalCost < 0) {
+        r.totalCost = 0;
+      }
+
+      if (!INV_SNAPSHOT_KEEP_ZERO && r.onHand === 0) return;
+
+      const avgCost = (r.onHand > 0) ? (r.totalCost / r.onHand) : 0;
+
+      const rowObj = {
+        'SKU': r.sku,
+        'Product Name': r.product,
+        'Variant / Color': r.variant,
+        'Warehouse (UAE)': r.warehouse,
+        'On Hand Qty': r.onHand,
+        'Allocated Qty': 0,
+        'Available Qty': r.onHand,
+        'Avg Cost (EGP)': avgCost,
+        'Total Cost (EGP)': r.totalCost,
+        'Last Txn Date': r.lastDate,
+        'Last Source Type': r.lastSourceType,
+        'Last Source ID': r.lastSourceId
+      };
+
+      rows.push(invHeaders.map(function (h) { return rowObj[h] !== undefined ? rowObj[h] : ''; }));
     });
 
     if (rows.length) {
       invSh.getRange(2, 1, rows.length, invSh.getLastColumn()).setValues(rows);
     }
-
   } catch (e) {
     logError_('rebuildInventoryUAEFromLedger', e);
     throw e;
   }
 }
 
+
 /**
  * Rebuild Inventory_EG snapshot sheet from Inventory_Transactions ledger.
- * نفس فكرة الإمارات لكن بيفلتر على المخازن اللي بتبدأ بـ "EG".
+ * Notes:
+ * - Uses the SAME signed valuation model as UAE ONLY if EG OUT rows carry cost.
+ * - If any EG OUT postings have 0 Unit Cost and 0 Total Cost, we fall back to IN-only valuation
+ *   (avg cost from IN, then Total Cost = Avg * OnHand) and log a TODO.
  */
 function rebuildInventoryEGFromLedger() {
   try {
-    const ledgerSh = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS) : getSheet_(APP.SHEETS.INVENTORY_TXNS);
-    const invSh    = (typeof ensureSheet_ === 'function') ? ensureSheet_(APP.SHEETS.INVENTORY_EG) : getSheet_(APP.SHEETS.INVENTORY_EG);
+    const tol = (typeof INV_VALUE_TOL_EGP === 'number') ? INV_VALUE_TOL_EGP : 0.05;
+
+    const ledgerSh = (typeof ensureSheet_ === 'function')
+      ? ensureSheet_(APP.SHEETS.INVENTORY_TXNS)
+      : getSheet_(APP.SHEETS.INVENTORY_TXNS);
+
+    const invSh = (typeof ensureSheet_ === 'function')
+      ? ensureSheet_(APP.SHEETS.INVENTORY_EG)
+      : getSheet_(APP.SHEETS.INVENTORY_EG);
 
     // Self-heal common ledger header drift (Warehouse duplicates)
-    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) {}
+    try { inv_repairInventoryTransactionsHeaders_(ledgerSh); } catch (e) { }
+
     const ledgerMap = getHeaderMap_(ledgerSh);
-    const invMap    = getHeaderMap_(invSh);
+    const invMap = getHeaderMap_(invSh);
 
     const lastRow = ledgerSh.getLastRow();
     if (lastRow < 2) {
@@ -706,37 +824,108 @@ function rebuildInventoryEGFromLedger() {
 
     const data = ledgerSh.getRange(2, 1, lastRow - 1, ledgerSh.getLastColumn()).getValues();
 
-    const idxSku       = ledgerMap[APP.COLS.INV_TXNS.SKU] - 1;
-    const idxWh        = ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] - 1;
-    const idxProd      = ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] - 1;
-    const idxVar       = ledgerMap[APP.COLS.INV_TXNS.VARIANT] - 1;
-    const idxQtyIn     = ledgerMap[APP.COLS.INV_TXNS.QTY_IN] - 1;
-    const idxQtyOut    = ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] - 1;
-    const idxUnitCost  = ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] - 1;
-    const idxTotalCost = ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] - 1;
-    const idxTxnDate   = ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] - 1;
-    const idxSrcType   = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1;
-    const idxSrcId     = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1;
+    const idxSku = (ledgerMap[APP.COLS.INV_TXNS.SKU] || ledgerMap['SKU']) - 1;
+    const idxWh = (ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] || ledgerMap['Warehouse']) - 1;
+    const idxProd = (ledgerMap[APP.COLS.INV_TXNS.PRODUCT_NAME] || ledgerMap['Product Name']) - 1;
+    const idxVar = (ledgerMap[APP.COLS.INV_TXNS.VARIANT] || ledgerMap['Variant / Color']) - 1;
+    const idxQtyIn = (ledgerMap[APP.COLS.INV_TXNS.QTY_IN] || ledgerMap['Qty In']) - 1;
+    const idxQtyOut = (ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] || ledgerMap['Qty Out']) - 1;
+    const idxUnitCost = (ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] || ledgerMap['Unit Cost (EGP)']) - 1;
+    const idxTotalCost = (ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] || ledgerMap['Total Cost (EGP)']) - 1;
+    const idxTxnDate = (ledgerMap[APP.COLS.INV_TXNS.TXN_DATE] || ledgerMap['Txn Date']) - 1;
+    const idxSrcType = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type']) - 1;
+    const idxSrcId = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID']) - 1;
 
-    const keyMap = {};
+    // We compute both models, then choose:
+    // - If ANY EG OUT rows are missing cost → fall back to IN-only valuation.
+    let hasCostlessEgOut = false;
+    let costlessEgOutLogged = 0;
 
-    data.forEach(row => {
-      const wh = (row[idxWh] || '').toString().trim().toUpperCase();
-      if (!_inv_isEgWarehouse_(wh)) return;
+    // Net-value map
+    const keyMapNet = {};
+    // IN-only map (safe fallback if OUT cost is missing)
+    const keyMapInOnly = {};
 
-      const qtyIn  = Number(row[idxQtyIn] || 0);
+    data.forEach(function (row, idx) {
+      const sku = row[idxSku];
+      if (!sku) return;
+
+      let wh = (row[idxWh] || '').toString().trim();
+      if (!wh) return;
+
+      if (typeof normalizeWarehouseCode_ === 'function') {
+        wh = normalizeWarehouseCode_(wh);
+      }
+      wh = String(wh || '').trim();
+
+      const whUpper = wh.toUpperCase();
+      if (!_inv_isEgWarehouse_(whUpper)) return;
+
+      const qtyIn = Number(row[idxQtyIn] || 0);
       const qtyOut = Number(row[idxQtyOut] || 0);
       if (qtyIn === 0 && qtyOut === 0) return;
 
-      const sku = row[idxSku];
-      const key = sku + '||' + wh + '||' + (row[idxVar] || '');
+      const unitCost = Number(row[idxUnitCost] || 0);
+      const totalCostCell = Number(row[idxTotalCost] || 0);
+      const variant = row[idxVar] || '';
 
-      if (!keyMap[key]) {
-        keyMap[key] = {
+      const key = String(sku) + '||' + String(whUpper) + '||' + String(variant);
+
+      // Detect costless OUT rows (historically common when OUT is written without avg-cost).
+      if (qtyOut > 0 && unitCost === 0 && totalCostCell === 0) {
+        hasCostlessEgOut = true;
+        if (costlessEgOutLogged < 5) {
+          costlessEgOutLogged++;
+          try {
+            logError_('rebuildInventoryEGFromLedger', new Error('EG OUT row has 0 Unit Cost and 0 Total Cost (valuation unsafe for net model). Using IN-only model.'), {
+              sku: sku,
+              variant: variant,
+              warehouse: whUpper,
+              qtyOut: qtyOut,
+              row: idx + 2,
+              sourceType: row[idxSrcType],
+              sourceId: row[idxSrcId]
+            });
+          } catch (e) { }
+        }
+      }
+
+      // ----- Net model (only safe if OUT has cost) -----
+      if (!keyMapNet[key]) {
+        keyMapNet[key] = {
           sku: sku,
           product: row[idxProd],
-          variant: row[idxVar],
-          warehouse: wh,
+          variant: variant,
+          warehouse: whUpper,
+          onHand: 0,
+          totalCost: 0,
+          lastDate: null,
+          lastSrcType: '',
+          lastSrcId: ''
+        };
+      }
+      const recN = keyMapNet[key];
+
+      const valIn = (qtyIn > 0) ? (totalCostCell || (unitCost * qtyIn)) : 0;
+      const valOut = (qtyOut > 0) ? (totalCostCell || (unitCost * qtyOut)) : 0;
+
+      recN.onHand += (qtyIn - qtyOut);
+      recN.totalCost += (valIn - valOut);
+
+      const txnDate = row[idxTxnDate];
+      if (txnDate && (!recN.lastDate || txnDate > recN.lastDate)) {
+        recN.lastDate = txnDate;
+        recN.lastSrcType = row[idxSrcType] || '';
+        recN.lastSrcId = row[idxSrcId] || '';
+      }
+
+      // ----- IN-only model (fallback) -----
+      if (!keyMapInOnly[key]) {
+        keyMapInOnly[key] = {
+          sku: sku,
+          product: row[idxProd],
+          variant: variant,
+          warehouse: whUpper,
           qtyIn: 0,
           qtyOut: 0,
           totalCostIn: 0,
@@ -746,61 +935,181 @@ function rebuildInventoryEGFromLedger() {
           lastSrcId: ''
         };
       }
+      const recI = keyMapInOnly[key];
 
-      const rec = keyMap[key];
-
-      // نعتبر فقط الحركات IN للتكلفة
       if (qtyIn > 0) {
-        const unitCost = Number(row[idxUnitCost] || 0);
-        const totalCost = Number(row[idxTotalCost] || unitCost * qtyIn);
-        rec.qtyIn += qtyIn;
-        rec.totalCostIn += totalCost;
-        rec.lastUnitCost = unitCost;
+        const valInOnly = (totalCostCell || (unitCost * qtyIn));
+        recI.qtyIn += qtyIn;
+        recI.totalCostIn += valInOnly;
+        recI.lastUnitCost = unitCost;
       }
+      recI.qtyOut += qtyOut;
 
-      rec.qtyOut += qtyOut;
-
-      const txnDate = row[idxTxnDate];
-      if (txnDate && (!rec.lastDate || txnDate > rec.lastDate)) {
-        rec.lastDate = txnDate;
-        rec.lastSrcType = row[idxSrcType];
-        rec.lastSrcId = row[idxSrcId];
+      if (txnDate && (!recI.lastDate || txnDate > recI.lastDate)) {
+        recI.lastDate = txnDate;
+        recI.lastSrcType = row[idxSrcType] || '';
+        recI.lastSrcId = row[idxSrcId] || '';
       }
     });
 
-    // امسح القديم
+    // Clear old snapshot
     if (invSh.getLastRow() > 1) {
       invSh.getRange(2, 1, invSh.getLastRow() - 1, invSh.getLastColumn()).clearContent();
     }
 
-    const invHeaders = Object.keys(invMap).sort((a, b) => invMap[a] - invMap[b]);
+    const invHeaders = Object.keys(invMap).sort(function (a, b) { return invMap[a] - invMap[b]; });
     const rows = [];
 
-    Object.values(keyMap).forEach(r => {
-      const onHand = r.qtyIn - r.qtyOut;
-      if (!INV_SNAPSHOT_KEEP_ZERO && onHand <= 0) return;
+    if (hasCostlessEgOut) {
+      // Fallback: IN-only valuation. Total Cost derived from avg IN cost and remaining qty.
+      // TODO: Ensure EG OUT postings carry Unit Cost / Total Cost so we can switch to signed net model.
+      Object.keys(keyMapInOnly).forEach(function (key) {
+        const r = keyMapInOnly[key];
+        let onHand = Number(r.qtyIn || 0) - Number(r.qtyOut || 0);
 
-      const avgCost = r.qtyIn ? r.totalCostIn / r.qtyIn : r.lastUnitCost;
-      const totalCost = avgCost * onHand;
+        // Clamp float noise
+        if (Math.abs(onHand) < 1e-9) onHand = 0;
 
-      const rowObj = {
-        'SKU': r.sku,
-        'Product Name': r.product,
-        'Variant / Color': r.variant,
-        'Warehouse (EG)': r.warehouse,
-        'On Hand Qty': onHand,
-        'Allocated Qty': 0,
-        'Available Qty': onHand,
-        'Avg Cost (EGP)': avgCost,
-        'Total Cost (EGP)': totalCost,
-        'Last Txn Date': r.lastDate,
-        'Last Source Type': r.lastSrcType,
-        'Last Source ID': r.lastSrcId
-      };
+        if (onHand < 0) {
+          try {
+            logError_('rebuildInventoryEGFromLedger', new Error('Negative On Hand Qty detected (overship). Snapshot clamped to 0/0.'), {
+              sku: r.sku,
+              variant: r.variant,
+              warehouse: r.warehouse,
+              onHand: onHand,
+              qtyIn: r.qtyIn,
+              qtyOut: r.qtyOut
+            });
+          } catch (e) { }
+          onHand = 0;
+        }
 
-      const rowArr = invHeaders.map(h => rowObj[h] !== undefined ? rowObj[h] : '');
-      rows.push(rowArr);
-    });
+        if (!INV_SNAPSHOT_KEEP_ZERO && onHand === 0) return;
+
+        const avgCost = r.qtyIn ? (r.totalCostIn / r.qtyIn) : Number(r.lastUnitCost || 0);
+        let totalCost = avgCost * onHand;
+
+        if (Math.abs(totalCost) < tol) totalCost = 0;
+
+        if (onHand === 0) {
+          if (Math.abs(totalCost) > tol) {
+            try {
+              logError_('rebuildInventoryEGFromLedger', new Error('Invariant violation: On Hand Qty is 0 but Total Cost is non-zero. Clamped to 0.'), {
+                sku: r.sku,
+                variant: r.variant,
+                warehouse: r.warehouse,
+                totalCost: totalCost
+              });
+            } catch (e) { }
+          }
+          totalCost = 0;
+        }
+
+        if (totalCost < -tol) {
+          try {
+            logError_('rebuildInventoryEGFromLedger', new Error('Negative Total Cost detected. Snapshot Total Cost clamped to 0.'), {
+              sku: r.sku,
+              variant: r.variant,
+              warehouse: r.warehouse,
+              onHand: onHand,
+              totalCost: totalCost
+            });
+          } catch (e) { }
+          totalCost = 0;
+        } else if (totalCost < 0) {
+          totalCost = 0;
+        }
+
+        const rowObj = {
+          'SKU': r.sku,
+          'Product Name': r.product,
+          'Variant / Color': r.variant,
+          'Warehouse (EG)': r.warehouse,
+          'On Hand Qty': onHand,
+          'Allocated Qty': 0,
+          'Available Qty': onHand,
+          'Avg Cost (EGP)': avgCost,
+          'Total Cost (EGP)': totalCost,
+          'Last Txn Date': r.lastDate,
+          'Last Source Type': r.lastSrcType,
+          'Last Source ID': r.lastSrcId
+        };
+
+        rows.push(invHeaders.map(function (h) { return rowObj[h] !== undefined ? rowObj[h] : ''; }));
+      });
+    } else {
+      // Signed net-value model (safe when OUT carries cost)
+      Object.keys(keyMapNet).forEach(function (key) {
+        const r = keyMapNet[key];
+
+        if (Math.abs(r.onHand) < 1e-9) r.onHand = 0;
+        if (Math.abs(r.totalCost) < tol) r.totalCost = 0;
+
+        if (r.onHand < 0) {
+          try {
+            logError_('rebuildInventoryEGFromLedger', new Error('Negative On Hand Qty detected (overship). Snapshot clamped to 0/0.'), {
+              sku: r.sku,
+              variant: r.variant,
+              warehouse: r.warehouse,
+              onHand: r.onHand,
+              totalCost: r.totalCost
+            });
+          } catch (e) { }
+          r.onHand = 0;
+          r.totalCost = 0;
+        }
+
+        if (r.onHand === 0) {
+          if (Math.abs(r.totalCost) > tol) {
+            try {
+              logError_('rebuildInventoryEGFromLedger', new Error('Invariant violation: On Hand Qty is 0 but Total Cost is non-zero. Clamped to 0.'), {
+                sku: r.sku,
+                variant: r.variant,
+                warehouse: r.warehouse,
+                totalCost: r.totalCost
+              });
+            } catch (e) { }
+          }
+          r.totalCost = 0;
+        }
+
+        if (r.totalCost < -tol) {
+          try {
+            logError_('rebuildInventoryEGFromLedger', new Error('Negative Total Cost detected. Snapshot Total Cost clamped to 0.'), {
+              sku: r.sku,
+              variant: r.variant,
+              warehouse: r.warehouse,
+              onHand: r.onHand,
+              totalCost: r.totalCost
+            });
+          } catch (e) { }
+          r.totalCost = 0;
+        } else if (r.totalCost < 0) {
+          r.totalCost = 0;
+        }
+
+        if (!INV_SNAPSHOT_KEEP_ZERO && r.onHand === 0) return;
+
+        const avgCost = (r.onHand > 0) ? (r.totalCost / r.onHand) : 0;
+
+        const rowObj = {
+          'SKU': r.sku,
+          'Product Name': r.product,
+          'Variant / Color': r.variant,
+          'Warehouse (EG)': r.warehouse,
+          'On Hand Qty': r.onHand,
+          'Allocated Qty': 0,
+          'Available Qty': r.onHand,
+          'Avg Cost (EGP)': avgCost,
+          'Total Cost (EGP)': r.totalCost,
+          'Last Txn Date': r.lastDate,
+          'Last Source Type': r.lastSrcType,
+          'Last Source ID': r.lastSrcId
+        };
+
+        rows.push(invHeaders.map(function (h) { return rowObj[h] !== undefined ? rowObj[h] : ''; }));
+      });
+    }
 
     if (rows.length) {
       invSh.getRange(2, 1, rows.length, invSh.getLastColumn()).setValues(rows);
@@ -811,6 +1120,7 @@ function rebuildInventoryEGFromLedger() {
   }
 }
 
+
 /**
  * Rebuild UAE + EG snapshots مع بعض.
  * المنيو في AppCore بينادي الفنكشن دي.
@@ -819,8 +1129,25 @@ function inv_rebuildAllSnapshots() {
   try {
     rebuildInventoryUAEFromLedger();
     rebuildInventoryEGFromLedger();
-    if (typeof safeAlert_ === 'function') safeAlert_('Inventory snapshots rebuilt (UAE + EG).');
-    else Logger.log('Inventory snapshots rebuilt (UAE + EG).');
+
+    // Optional: seed UAE→EG planning rows after snapshots rebuild
+    if (typeof seedShipmentsUaeEgFromInventoryUae === 'function') {
+      try {
+        seedShipmentsUaeEgFromInventoryUae();
+      } catch (e) {
+        logError_('inv_rebuildAllSnapshots.seedShipmentsUaeEgFromInventoryUae', e);
+        // Non-fatal: inventory snapshots should still be considered rebuilt.
+      }
+    }
+
+    if (typeof safeAlert_ === 'function') {
+      safeAlert_('Inventory snapshots rebuilt (UAE + EG).');
+    } else {
+      Logger.log('Inventory snapshots rebuilt (UAE + EG).');
+    }
+  } catch (err) {
+    try { logError_('inv_rebuildAllSnapshots', err); } catch (e) { }
+    throw err;
   }
 }
 
@@ -886,4 +1213,153 @@ function test_manualInventoryTxn() {
     notes: 'Manual test txn'
   });
   inv_rebuildAllSnapshots();
+}
+
+
+
+/** ===================== ONE-TIME REPAIR HELPERS (MANUAL RUN) ===================== */
+
+/**
+ * Backfill missing Txn IDs in Inventory_Transactions.
+ * Safe to re-run; only fills blank Txn ID cells.
+ */
+function inv_backfillMissingTxnIds() {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const sh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
+    const map = getHeaderMap_(sh);
+
+    const colTxnId = map[APP.COLS.INV_TXNS.TXN_ID];
+    const colTxnDate = map[APP.COLS.INV_TXNS.TXN_DATE];
+    const colSrcType = map[APP.COLS.INV_TXNS.SOURCE_TYPE];
+    const colSrcId = map[APP.COLS.INV_TXNS.SOURCE_ID];
+    const colBatch = map[APP.COLS.INV_TXNS.BATCH_CODE];
+    const colSku = map[APP.COLS.INV_TXNS.SKU];
+    const colWh = map[APP.COLS.INV_TXNS.WAREHOUSE];
+    const colQtyIn = map[APP.COLS.INV_TXNS.QTY_IN];
+    const colQtyOut = map[APP.COLS.INV_TXNS.QTY_OUT];
+    const colUnit = map[APP.COLS.INV_TXNS.UNIT_COST];
+    const colCur = map[APP.COLS.INV_TXNS.CURRENCY];
+    const colUPO = map[APP.COLS.INV_TXNS.UNIT_PRICE_ORIG];
+
+    if (!colTxnId || !colTxnDate || !colSku || !colWh || !colQtyIn || !colQtyOut) {
+      throw new Error('inv_backfillMissingTxnIds: missing required ledger columns');
+    }
+
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return 0;
+
+    const values = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues();
+    const outIds = [];
+    let touched = 0;
+
+    values.forEach(function (r) {
+      const existing = r[colTxnId - 1];
+      if (existing && String(existing).trim()) {
+        outIds.push([existing]);
+        return;
+      }
+
+      const qtyIn = Number(r[colQtyIn - 1] || 0);
+      const qtyOut = Number(r[colQtyOut - 1] || 0);
+      const type = qtyIn ? 'IN' : (qtyOut ? 'OUT' : 'IN');
+
+      const o = {
+        type: type,
+        sourceType: colSrcType ? r[colSrcType - 1] : '',
+        sourceId: colSrcId ? r[colSrcId - 1] : '',
+        batchCode: colBatch ? r[colBatch - 1] : '',
+        sku: colSku ? r[colSku - 1] : '',
+        warehouse: colWh ? r[colWh - 1] : '',
+        qtyIn: qtyIn,
+        qtyOut: qtyOut,
+        unitCostEgp: colUnit ? Number(r[colUnit - 1] || 0) : 0,
+        currency: colCur ? r[colCur - 1] : '',
+        unitPriceOrig: colUPO ? Number(r[colUPO - 1] || 0) : 0,
+        txnDate: r[colTxnDate - 1] ? new Date(r[colTxnDate - 1]) : new Date()
+      };
+
+      const id = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_(o) : '';
+      outIds.push([id]);
+      if (id) touched++;
+    });
+
+    if (touched) {
+      sh.getRange(2, colTxnId, outIds.length, 1).setValues(outIds);
+    }
+    return touched;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Repair Warehouse column for QC_UAE ledger rows based on QC_UAE sheet (by QC ID).
+ * This fixes legacy/default 'UAE-DXB' values and aligns ledger with QC.
+ */
+function inv_repairQcUaeLedgerWarehousesFromQcSheet() {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const qcSh = getSheet_(APP.SHEETS.QC_UAE);
+    const lgSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
+
+    const qcMap = getHeaderMap_(qcSh);
+    const lgMap = getHeaderMap_(lgSh);
+
+    const qcColId = qcMap[APP.COLS.QC_UAE.QC_ID];
+    const qcColWh = qcMap[APP.COLS.QC_UAE.WAREHOUSE];
+    if (!qcColId || !qcColWh) throw new Error('inv_repairQcUaeLedgerWarehousesFromQcSheet: missing QC headers');
+    const lgColSrcType = lgMap[APP.COLS.INV_TXNS.SOURCE_TYPE];
+    const lgColSrcId = lgMap[APP.COLS.INV_TXNS.SOURCE_ID];
+    const lgColWh = lgMap[APP.COLS.INV_TXNS.WAREHOUSE];
+    if (!lgColSrcType || !lgColSrcId || !lgColWh) throw new Error('inv_repairQcUaeLedgerWarehousesFromQcSheet: missing ledger headers');
+
+    const qcLast = qcSh.getLastRow();
+    const lgLast = lgSh.getLastRow();
+    if (qcLast < 2 || lgLast < 2) return 0;
+
+    // Build QC_ID -> canonical warehouse
+    const qcData = qcSh.getRange(2, 1, qcLast - 1, qcSh.getLastColumn()).getValues();
+    const qcWhById = {};
+    qcData.forEach(function (r) {
+      const id = (r[qcColId - 1] || '').toString().trim();
+      if (!id) return;
+      const whRaw = (r[qcColWh - 1] || '').toString().trim();
+      const wh = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(whRaw) : whRaw;
+      if (wh) qcWhById[id] = wh;
+    });
+
+    const lgData = lgSh.getRange(2, 1, lgLast - 1, lgSh.getLastColumn()).getValues();
+    const outWh = [];
+    let touched = 0;
+
+    lgData.forEach(function (r) {
+      const srcType = (r[lgColSrcType - 1] || '').toString().trim();
+      if (srcType !== 'QC_UAE') {
+        outWh.push([r[lgColWh - 1]]);
+        return;
+      }
+
+      const qcId = (r[lgColSrcId - 1] || '').toString().trim();
+      const desired = qcWhById[qcId] || '';
+      const currentRaw = (r[lgColWh - 1] || '').toString().trim();
+      const current = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(currentRaw) : currentRaw;
+
+      if (desired && desired !== current) {
+        outWh.push([desired]);
+        touched++;
+      } else {
+        outWh.push([r[lgColWh - 1]]);
+      }
+    });
+
+    if (touched) {
+      lgSh.getRange(2, lgColWh, outWh.length, 1).setValues(outWh);
+    }
+    return touched;
+  } finally {
+    lock.releaseLock();
+  }
 }

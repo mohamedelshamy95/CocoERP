@@ -51,9 +51,9 @@ const SHIP_CN_UAE_HEADERS = [
   'Gross Weight (kg)',
   'Volume (CBM)',
 
-  APP.COLS.SHIP_CN_UAE.FREIGHT,
-  APP.COLS.SHIP_CN_UAE.OTHER,
-  APP.COLS.SHIP_CN_UAE.TOTAL_COST,
+  APP.COLS.SHIP_CN_UAE.FREIGHT_AED,
+  APP.COLS.SHIP_CN_UAE.OTHER_AED,
+  APP.COLS.SHIP_CN_UAE.TOTAL_AED,
 
   APP.COLS.PURCHASES.NOTES
 ];
@@ -71,6 +71,8 @@ const SHIP_UAE_EG_HEADERS = [
   APP.COLS.SHIP_UAE_EG.ARRIVAL,
   APP.COLS.SHIP_UAE_EG.STATUS,
 
+  APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE,   // 'Warehouse (UAE)'
+
   APP.COLS.SHIP_UAE_EG.SKU,
   APP.COLS.PURCHASES.PRODUCT,
   APP.COLS.PURCHASES.VARIANT,
@@ -82,7 +84,8 @@ const SHIP_UAE_EG_HEADERS = [
   APP.COLS.SHIP_UAE_EG.CUSTOMS,
   APP.COLS.SHIP_UAE_EG.OTHER,
   APP.COLS.SHIP_UAE_EG.TOTAL_COST,
-  
+
+  APP.COLS.SHIP_UAE_EG.LINE_ID,
 
   APP.COLS.PURCHASES.NOTES
 ];
@@ -94,7 +97,7 @@ const SHIP_UAE_EG_HEADERS = [
 function setupQcLayout() {
   try {
     setupQC_UAE_();
-    SpreadsheetApp.getUi().alert('تم تجهيز شيت QC_UAE ✔️');
+    safeAlert_('تم تجهيز شيت QC_UAE ✔️');
   } catch (e) {
     logError_('setupQcLayout', e);
     throw e;
@@ -105,7 +108,7 @@ function setupShipmentsLayouts() {
   try {
     setupShipmentsCnUae_();
     setupShipmentsUaeEg_();
-    SpreadsheetApp.getUi().alert('تم تجهيز شيتات الشحن (CN→UAE + UAE→EG) ✔️');
+    safeAlert_('تم تجهيز شيتات الشحن (CN→UAE + UAE→EG) ✔️');
   } catch (e) {
     logError_('setupShipmentsLayouts', e);
     throw e;
@@ -117,7 +120,7 @@ function setupLogisticsLayout() {
     setupQC_UAE_();
     setupShipmentsCnUae_();
     setupShipmentsUaeEg_();
-    SpreadsheetApp.getUi().alert('تم تجهيز شيتات اللوجستيك (QC + Shipments) ✔️');
+    safeAlert_('تم تجهيز شيتات اللوجستيك (QC + Shipments) ✔️');
   } catch (e) {
     logError_('setupLogisticsLayout', e);
     throw e;
@@ -165,9 +168,9 @@ function setupShipmentsCnUae_() {
   _applyIntFormatByHeaders_(sh, map, [APP.COLS.PURCHASES.QTY]);
 
   _applyDecimalFormatByHeaders_(sh, map, [
-    APP.COLS.SHIP_CN_UAE.FREIGHT,
-    APP.COLS.SHIP_CN_UAE.OTHER,
-    APP.COLS.SHIP_CN_UAE.TOTAL_COST,
+    APP.COLS.SHIP_CN_UAE.FREIGHT_AED,
+    APP.COLS.SHIP_CN_UAE.OTHER_AED,
+    APP.COLS.SHIP_CN_UAE.TOTAL_AED,
     'Gross Weight (kg)',
     'Volume (CBM)'
   ]);
@@ -251,9 +254,9 @@ function _setupSheetWithHeaders_(sheet, headers, opts) {
   hdr.setFontWeight('bold');
 
   // Freeze header row for usability
-  try { sheet.setFrozenRows(Math.max(1, freezeRows)); } catch (e) {}
+  try { sheet.setFrozenRows(Math.max(1, freezeRows)); } catch (e) { }
   if (freezeCols) {
-    try { sheet.setFrozenColumns(Math.max(1, freezeCols)); } catch (e) {}
+    try { sheet.setFrozenColumns(Math.max(1, freezeCols)); } catch (e) { }
   }
 }
 

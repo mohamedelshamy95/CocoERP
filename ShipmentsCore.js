@@ -27,11 +27,11 @@
 
 /** Unified shipment status constants (used in both CN→UAE & UAE→EG) */
 const SHIPMENT_STATUS = {
-  PLANNED:     'Planned',
-  IN_TRANSIT:  'In Transit',
-  DELAYED:     'Delayed',
+  PLANNED: 'Planned',
+  IN_TRANSIT: 'In Transit',
+  DELAYED: 'Delayed',
   ARRIVED_UAE: 'Arrived UAE',
-  ARRIVED_EG:  'Arrived EG'
+  ARRIVED_EG: 'Arrived EG'
 };
 
 /* ===================================================================
@@ -51,28 +51,29 @@ const SHIPMENT_STATUS = {
  *
  *  - Ignores empty rows (no Shipment ID) and clears Status + Total Cost.
  */
-function updateShipmentsCnUaeStatusAndTotals() {
+function updateShipmentsCnUaeStatusAndTotals(opts) {
+  const interactive = !!(opts && opts.interactive);
   try {
     const sh = getSheet_(APP.SHEETS.SHIP_CN_UAE);
     const lastRow = sh.getLastRow();
     if (lastRow < 2) {
-      SpreadsheetApp.getUi().alert('No data found in Shipments_CN_UAE.');
+      safeAlert_('No data found in Shipments_CN_UAE.');
       return;
     }
 
     const map = getHeaderMap_(sh);
 
     const colShipmentId = map[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || map['Shipment ID'];
-    const colShipDate   = map[APP.COLS.SHIP_CN_UAE.SHIP_DATE]   || map['Ship Date'];
-    const colEta        = map[APP.COLS.SHIP_CN_UAE.ETA]         || map['ETA'];
-    const colArrival    = map[APP.COLS.SHIP_CN_UAE.ARRIVAL]     || map['Actual Arrival'];
-    const colStatus     = map[APP.COLS.SHIP_CN_UAE.STATUS]      || map['Status'];
-    const colFreight    = map[APP.COLS.SHIP_CN_UAE.FREIGHT]     || map['Freight (AED)'];
-    const colOther      = map[APP.COLS.SHIP_CN_UAE.OTHER]       || map['Other Fees (AED)'];
-    const colTotal      = map[APP.COLS.SHIP_CN_UAE.TOTAL_COST]  || map['Total Cost (AED)'];
+    const colShipDate = map[APP.COLS.SHIP_CN_UAE.SHIP_DATE] || map['Ship Date'];
+    const colEta = map[APP.COLS.SHIP_CN_UAE.ETA] || map['ETA'];
+    const colArrival = map[APP.COLS.SHIP_CN_UAE.ARRIVAL] || map['Actual Arrival'];
+    const colStatus = map[APP.COLS.SHIP_CN_UAE.STATUS] || map['Status'];
+    const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT_AED] || map['Freight (AED)'];
+    const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER_AED] || map['Other Fees (AED)'];
+    const colTotal = map[APP.COLS.SHIP_CN_UAE.TOTAL_AED] || map['Total Cost (AED)'];
 
     if (!colShipmentId || !colStatus) {
-      SpreadsheetApp.getUi().alert('Missing required headers in Shipments_CN_UAE (Shipment ID / Status).');
+      safeAlert_('Missing required headers in Shipments_CN_UAE (Shipment ID / Status).');
       return;
     }
 
@@ -101,21 +102,21 @@ function updateShipmentsCnUaeStatusAndTotals() {
       let totalVal = '';
       if (colTotal && colFreight) {
         const rawFreight = row[colFreight - 1];
-        const rawOther   = colOther ? row[colOther - 1] : '';
+        const rawOther = colOther ? row[colOther - 1] : '';
 
         if (rawFreight === '' && (rawOther === '' || rawOther === undefined)) {
           totalVal = '';
         } else {
           const freight = Number(rawFreight || 0);
-          const other   = colOther ? Number(rawOther || 0) : 0;
+          const other = colOther ? Number(rawOther || 0) : 0;
           totalVal = freight + other;
         }
       }
 
       // ----- Status -----
       const shipDate = colShipDate ? row[colShipDate - 1] : null;
-      const eta      = colEta      ? row[colEta - 1]      : null;
-      const arr      = colArrival  ? row[colArrival - 1]  : null;
+      const eta = colEta ? row[colEta - 1] : null;
+      const arr = colArrival ? row[colArrival - 1] : null;
 
       let status;
       if (arr) {
@@ -141,7 +142,7 @@ function updateShipmentsCnUaeStatusAndTotals() {
       sh.getRange(2, colTotal, numRows, 1).setNumberFormat('0.00');
     }
 
-    SpreadsheetApp.getUi().alert('Shipments_CN_UAE updated (status + totals) ✔️');
+    if (interactive && typeof safeAlert_ === 'function') safeAlert_('Shipments_CN_UAE updated (status + totals)');
   } catch (e) {
     logError_('updateShipmentsCnUaeStatusAndTotals', e);
     throw e;
@@ -168,13 +169,13 @@ function _updateShipmentCnUaeStatusForRow_(sh, rowIndex, headerMap) {
   const map = headerMap || getHeaderMap_(sh);
 
   const colShipmentId = map[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || map['Shipment ID'];
-  const colShipDate   = map[APP.COLS.SHIP_CN_UAE.SHIP_DATE]   || map['Ship Date'];
-  const colEta        = map[APP.COLS.SHIP_CN_UAE.ETA]         || map['ETA'];
-  const colArrival    = map[APP.COLS.SHIP_CN_UAE.ARRIVAL]     || map['Actual Arrival'];
-  const colStatus     = map[APP.COLS.SHIP_CN_UAE.STATUS]      || map['Status'];
-  const colFreight    = map[APP.COLS.SHIP_CN_UAE.FREIGHT]     || map['Freight (AED)'];
-  const colOther      = map[APP.COLS.SHIP_CN_UAE.OTHER]       || map['Other Fees (AED)'];
-  const colTotal      = map[APP.COLS.SHIP_CN_UAE.TOTAL_COST]  || map['Total Cost (AED)'];
+  const colShipDate = map[APP.COLS.SHIP_CN_UAE.SHIP_DATE] || map['Ship Date'];
+  const colEta = map[APP.COLS.SHIP_CN_UAE.ETA] || map['ETA'];
+  const colArrival = map[APP.COLS.SHIP_CN_UAE.ARRIVAL] || map['Actual Arrival'];
+  const colStatus = map[APP.COLS.SHIP_CN_UAE.STATUS] || map['Status'];
+  const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT_AED] || map['Freight (AED)'];
+  const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER_AED] || map['Other Fees (AED)'];
+  const colTotal = map[APP.COLS.SHIP_CN_UAE.TOTAL_AED] || map['Total Cost (AED)'];
 
   if (!colShipmentId || !colStatus) {
     // Required columns missing (header renamed or incomplete layout)
@@ -189,38 +190,38 @@ function _updateShipmentCnUaeStatusForRow_(sh, rowIndex, headerMap) {
   // Empty row → clear Status + Total Cost (if present) and exit
   if (!shipmentId) {
     if (colStatus) sh.getRange(rowIndex, colStatus).clearContent();
-    if (colTotal)  sh.getRange(rowIndex, colTotal).clearContent();
+    if (colTotal) sh.getRange(rowIndex, colTotal).clearContent();
     return;
   }
 
   // ----- Total Cost (AED) -----
   if (colTotal && colFreight) {
     const rawFreight = row[colFreight - 1];
-    const rawOther   = colOther ? row[colOther - 1] : '';
+    const rawOther = colOther ? row[colOther - 1] : '';
 
     // If no numbers in Freight / Other → leave Total Cost empty
     if (rawFreight === '' && (rawOther === '' || rawOther === undefined)) {
       row[colTotal - 1] = '';
     } else {
       const freight = Number(rawFreight || 0);
-      const other   = colOther ? Number(rawOther || 0) : 0;
+      const other = colOther ? Number(rawOther || 0) : 0;
       row[colTotal - 1] = freight + other;
     }
   }
 
   // ----- Status -----
   const ship = colShipDate ? row[colShipDate - 1] : null;
-  const eta  = colEta      ? row[colEta - 1]      : null;
-  const arr  = colArrival  ? row[colArrival - 1]  : null;
+  const eta = colEta ? row[colEta - 1] : null;
+  const arr = colArrival ? row[colArrival - 1] : null;
 
   let status;
 
   if (arr) {
     status = SHIPMENT_STATUS.ARRIVED_UAE;
   } else if (ship && eta) {
-    const today    = new Date();
+    const today = new Date();
     const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const etaMid   = new Date(eta.getFullYear(), eta.getMonth(), eta.getDate());
+    const etaMid = new Date(eta.getFullYear(), eta.getMonth(), eta.getDate());
 
     status = etaMid < todayMid
       ? SHIPMENT_STATUS.DELAYED
@@ -262,11 +263,11 @@ function shipmentsCnUaeOnEdit_(e) {
     const map = getHeaderMap_(sh);
 
     const colShipmentId = map[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || map['Shipment ID'];
-    const colShipDate   = map[APP.COLS.SHIP_CN_UAE.SHIP_DATE]   || map['Ship Date'];
-    const colEta        = map[APP.COLS.SHIP_CN_UAE.ETA]         || map['ETA'];
-    const colArrival    = map[APP.COLS.SHIP_CN_UAE.ARRIVAL]     || map['Actual Arrival'];
-    const colFreight    = map[APP.COLS.SHIP_CN_UAE.FREIGHT]     || map['Freight (AED)'];
-    const colOther      = map[APP.COLS.SHIP_CN_UAE.OTHER]       || map['Other Fees (AED)'];
+    const colShipDate = map[APP.COLS.SHIP_CN_UAE.SHIP_DATE] || map['Ship Date'];
+    const colEta = map[APP.COLS.SHIP_CN_UAE.ETA] || map['ETA'];
+    const colArrival = map[APP.COLS.SHIP_CN_UAE.ARRIVAL] || map['Actual Arrival'];
+    const colFreight = map[APP.COLS.SHIP_CN_UAE.FREIGHT_AED] || map['Freight (AED)'];
+    const colOther = map[APP.COLS.SHIP_CN_UAE.OTHER_AED] || map['Other Fees (AED)'];
 
     if (!colShipmentId) return;
 
@@ -360,42 +361,43 @@ function rebuildShipmentsCnUaeStatus_() {
  *    * If Ship Date only => In Transit
  *    * Otherwise => Planned
  */
-function updateShipmentsUaeEgStatusAndTotals() {
+function updateShipmentsUaeEgStatusAndTotals(opts) {
+  const interactive = !!(opts && opts.interactive);
   try {
-    const sh  = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+    const sh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
     const map = getHeaderMap_(sh);
 
     const colShipDate = map[APP.COLS.SHIP_UAE_EG.SHIP_DATE] ||
-                        map['Ship Date'] ||
-                        map['Ship Date (UAE)'];
+      map['Ship Date'] ||
+      map['Ship Date (UAE)'];
 
-    const colEta      = map[APP.COLS.SHIP_UAE_EG.ETA] ||
-                        map['ETA'];
+    const colEta = map[APP.COLS.SHIP_UAE_EG.ETA] ||
+      map['ETA'];
 
-    const colArr      = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] ||
-                        map['Actual Arrival'] ||
-                        map['Actual Arrival (EG)'];
+    const colArr = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] ||
+      map['Actual Arrival'] ||
+      map['Actual Arrival (EG)'];
 
-    const colStatus   = map[APP.COLS.SHIP_UAE_EG.STATUS] ||
-                        map['Status'];
+    const colStatus = map[APP.COLS.SHIP_UAE_EG.STATUS] ||
+      map['Status'];
 
-    const colQty      = map[APP.COLS.SHIP_UAE_EG.QTY] ||
-                        map['Qty'];
+    const colQty = map[APP.COLS.SHIP_UAE_EG.QTY] ||
+      map['Qty'];
 
     const colShipCost = map[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
-                        map['Ship Cost (EGP) - per unit or box'] ||
-                        map['Ship Cost (EGP)'];
+      map['Ship Cost (EGP) - per unit or box'] ||
+      map['Ship Cost (EGP)'];
 
-    const colCustoms  = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
-                        map['Customs (EGP)'] ||
-                        map['Customs / Clearance (EGP)'];
+    const colCustoms = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
+      map['Customs (EGP)'] ||
+      map['Customs / Clearance (EGP)'];
 
-    const colOther    = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
-                        map['Other (EGP)'] ||
-                        map['Other Fees (EGP)'];
+    const colOther = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
+      map['Other (EGP)'] ||
+      map['Other Fees (EGP)'];
 
-    const colTotal    = map[APP.COLS.SHIP_UAE_EG.TOTAL_COST] ||
-                        map['Total Cost (EGP)'];
+    const colTotal = map[APP.COLS.SHIP_UAE_EG.TOTAL_COST] ||
+      map['Total Cost (EGP)'];
 
     const requiredCols = [
       colShipDate, colEta, colArr, colStatus,
@@ -408,43 +410,44 @@ function updateShipmentsUaeEgStatusAndTotals() {
 
     const lastRow = sh.getLastRow();
     if (lastRow < 2) {
-      SpreadsheetApp.getUi().alert('No data found in Shipments_UAE_EG.');
+      if (interactive && typeof safeAlert_ === 'function') safeAlert_('No data found in Shipments_UAE_EG.');
+      else Logger.log('No data found in Shipments_UAE_EG.');
       return;
     }
 
     const numRows = lastRow - 1;
-    const range   = sh.getRange(2, 1, numRows, sh.getLastColumn());
-    const values  = range.getValues();
+    const range = sh.getRange(2, 1, numRows, sh.getLastColumn());
+    const values = range.getValues();
 
     const idx = {
       shipDate: colShipDate - 1,
-      eta:      colEta      - 1,
-      arr:      colArr      - 1,
-      status:   colStatus   - 1,
-      qty:      colQty      - 1,
+      eta: colEta - 1,
+      arr: colArr - 1,
+      status: colStatus - 1,
+      qty: colQty - 1,
       shipCost: colShipCost - 1,
-      customs:  colCustoms  - 1,
-      other:    colOther    - 1,
-      total:    colTotal    - 1
+      customs: colCustoms - 1,
+      other: colOther - 1,
+      total: colTotal - 1
     };
 
-    const today    = new Date();
+    const today = new Date();
     const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     values.forEach(function (row) {
       // ----- Total Cost -----
-      const qty             = Number(row[idx.qty]      || 0);
+      const qty = Number(row[idx.qty] || 0);
       const shipCostPerUnit = Number(row[idx.shipCost] || 0);
-      const customs         = Number(row[idx.customs]  || 0);
-      const other           = Number(row[idx.other]    || 0);
+      const customs = Number(row[idx.customs] || 0);
+      const other = Number(row[idx.other] || 0);
 
       const totalForShipment = (shipCostPerUnit * qty) + customs + other;
       row[idx.total] = totalForShipment;
 
       // ----- Status -----
       const ship = row[idx.shipDate];
-      const eta  = row[idx.eta];
-      const arr  = row[idx.arr];
+      const eta = row[idx.eta];
+      const arr = row[idx.arr];
 
       let status;
       if (arr) {
@@ -468,7 +471,7 @@ function updateShipmentsUaeEgStatusAndTotals() {
     // Ensure number format for Total Cost (EGP)
     sh.getRange(2, colTotal, numRows, 1).setNumberFormat('0.00');
 
-    SpreadsheetApp.getUi().alert('Shipments_UAE_EG updated (status + totals) ✔️');
+    if (interactive && typeof safeAlert_ === 'function') safeAlert_('Shipments_UAE_EG updated (status + totals)');
   } catch (e) {
     logError_('updateShipmentsUaeEgStatusAndTotals', e);
     throw e;
@@ -480,8 +483,8 @@ function updateShipmentsUaeEgStatusAndTotals() {
  * Used from the menu: Logistics & Inventory → Update Shipments Status & Totals
  */
 function updateAllShipmentsStatusAndTotals() {
-  updateShipmentsCnUaeStatusAndTotals();
-  updateShipmentsUaeEgStatusAndTotals();
+  updateShipmentsCnUaeStatusAndTotals({ interactive: true });
+  updateShipmentsUaeEgStatusAndTotals({ interactive: true });
 }
 
 /* ===================================================================
@@ -515,7 +518,7 @@ function updateAllShipmentsStatusAndTotals() {
 function syncPurchasesToShipmentsCnUae() {
   try {
     const purchSh = getSheet_(APP.SHEETS.PURCHASES);
-    const shipSh  = getSheet_(APP.SHEETS.SHIP_CN_UAE);
+    const shipSh = getSheet_(APP.SHEETS.SHIP_CN_UAE);
 
     const pMap = getHeaderMap_(purchSh);
     const sMap = getHeaderMap_(shipSh);
@@ -527,19 +530,19 @@ function syncPurchasesToShipmentsCnUae() {
     }
 
     // Purchases columns (robust)
-    const colOrderId   = pMap[APP.COLS.PURCHASES.ORDER_ID]   || pMap['Order ID'];
+    const colOrderId = pMap[APP.COLS.PURCHASES.ORDER_ID] || pMap['Order ID'];
     const colOrderDate = pMap[APP.COLS.PURCHASES.ORDER_DATE] || pMap['Order Date'];
-    const colPlatform  = pMap[APP.COLS.PURCHASES.PLATFORM]   || pMap['Platform'];
-    const colSeller    = pMap[APP.COLS.PURCHASES.SELLER]     || pMap['Seller Name'];
-    const colSku       = pMap[APP.COLS.PURCHASES.SKU]        || pMap['SKU'];
-    const colProduct   = pMap[APP.COLS.PURCHASES.PRODUCT_NAME] || pMap[APP.COLS.PURCHASES.PRODUCT] || pMap['Product Name'];
-    const colVariant   = pMap[APP.COLS.PURCHASES.VARIANT]      || pMap['Variant / Color'];
-    const colQty       = pMap[APP.COLS.PURCHASES.QTY]        || pMap['Qty'];
-    const colLineId    = pMap[APP.COLS.PURCHASES.LINE_ID]    || pMap['Line ID'];
+    const colPlatform = pMap[APP.COLS.PURCHASES.PLATFORM] || pMap['Platform'];
+    const colSeller = pMap[APP.COLS.PURCHASES.SELLER] || pMap['Seller Name'];
+    const colSku = pMap[APP.COLS.PURCHASES.SKU] || pMap['SKU'];
+    const colProduct = pMap[APP.COLS.PURCHASES.PRODUCT_NAME] || pMap[APP.COLS.PURCHASES.PRODUCT] || pMap['Product Name'];
+    const colVariant = pMap[APP.COLS.PURCHASES.VARIANT] || pMap['Variant / Color'];
+    const colQty = pMap[APP.COLS.PURCHASES.QTY] || pMap['Qty'];
+    const colLineId = pMap[APP.COLS.PURCHASES.LINE_ID] || pMap['Line ID'];
 
     // Invoice indicators (to decide "ready to ship")
-    const colInvoiceLink   = pMap['Invoice Link'];
-    const colInvoicePrev   = pMap['Invoice Preview'];
+    const colInvoiceLink = pMap['Invoice Link'];
+    const colInvoicePrev = pMap['Invoice Preview'];
     const colOrderTotalEgp = pMap[APP.COLS.PURCHASES.TOTAL_EGP] || pMap['Order Total (EGP)'];
 
     if (!colOrderId || !colSku || !colQty) {
@@ -554,20 +557,20 @@ function syncPurchasesToShipmentsCnUae() {
       if (typeof purchases_ensureLineIds_ === 'function') {
         purchases_ensureLineIds_(purchSh, pMap, 2, lastPurRow - 1);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const purchData = purchSh
       .getRange(2, 1, lastPurRow - 1, purchSh.getLastColumn())
       .getValues();
 
     // Shipments columns
-    const shipColId        = sMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID]       || sMap['Shipment ID'];
-    const shipColOrderId   = sMap[APP.COLS.SHIP_CN_UAE.ORDER_BATCH]       || sMap['Order ID (Batch)'] || sMap['Order ID'];
-    const shipColLineId    = sMap[APP.COLS.SHIP_CN_UAE.PURCHASE_LINE_ID]  || sMap['Purchases Line ID'];
-    const shipColSku       = sMap[APP.COLS.SHIP_CN_UAE.SKU]               || sMap['SKU'];
-    const shipColVariant   = sMap[APP.COLS.SHIP_CN_UAE.VARIANT]           || sMap['Variant / Color'] || sMap[APP.COLS.PURCHASES.VARIANT];
-    const shipColQty       = sMap[APP.COLS.SHIP_CN_UAE.QTY]               || sMap[APP.COLS.PURCHASES.QTY] || sMap['Qty'];
-    const shipColProd      = sMap[APP.COLS.SHIP_CN_UAE.PRODUCT_NAME]      || sMap['Product Name'];
+    const shipColId = sMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || sMap['Shipment ID'];
+    const shipColOrderId = sMap[APP.COLS.SHIP_CN_UAE.ORDER_BATCH] || sMap['Order ID (Batch)'] || sMap['Order ID'];
+    const shipColLineId = sMap[APP.COLS.SHIP_CN_UAE.PURCHASE_LINE_ID] || sMap['Purchases Line ID'];
+    const shipColSku = sMap[APP.COLS.SHIP_CN_UAE.SKU] || sMap['SKU'];
+    const shipColVariant = sMap[APP.COLS.SHIP_CN_UAE.VARIANT] || sMap['Variant / Color'] || sMap[APP.COLS.PURCHASES.VARIANT];
+    const shipColQty = sMap[APP.COLS.SHIP_CN_UAE.QTY] || sMap[APP.COLS.PURCHASES.QTY] || sMap['Qty'];
+    const shipColProd = sMap[APP.COLS.SHIP_CN_UAE.PRODUCT_NAME] || sMap['Product Name'];
 
     if (!shipColOrderId || !shipColSku || !shipColQty || !shipColLineId) {
       throw new Error('Missing required Shipments_CN_UAE columns (Order ID (Batch) / Purchases Line ID / SKU / Qty). Run Logistics → Setup Shipments Layouts.');
@@ -589,8 +592,8 @@ function syncPurchasesToShipmentsCnUae() {
       existingRows.forEach(function (row, i) {
         const sheetRow = i + 2;
         const orderId = row[shipColOrderId - 1];
-        const lineId  = String(row[shipColLineId - 1] || '').trim();
-        const shipId  = shipColId ? String(row[shipColId - 1] || '').trim() : '';
+        const lineId = String(row[shipColLineId - 1] || '').trim();
+        const shipId = shipColId ? String(row[shipColId - 1] || '').trim() : '';
 
         if (orderId && shipId) orderToShipmentId[String(orderId)] = shipId;
 
@@ -619,17 +622,17 @@ function syncPurchasesToShipmentsCnUae() {
     purchData.forEach(function (r) {
       const orderIdRaw = colOrderId ? r[colOrderId - 1] : '';
       const orderId = String(orderIdRaw || '').trim();
-      const sku     = colSku ? String(r[colSku - 1] || '').trim() : '';
-      const qty     = colQty ? Number(r[colQty - 1] || 0) : 0;
-      const lineId  = colLineId ? String(r[colLineId - 1] || '').trim() : '';
+      const sku = colSku ? String(r[colSku - 1] || '').trim() : '';
+      const qty = colQty ? Number(r[colQty - 1] || 0) : 0;
+      const lineId = colLineId ? String(r[colLineId - 1] || '').trim() : '';
 
       if (!orderId || !sku || !qty) return;
       if (!lineId) return;
 
       // Only sync if invoice exists (any of these signals)
       const hasInvoice =
-        (colInvoiceLink   && r[colInvoiceLink - 1]) ||
-        (colInvoicePrev   && r[colInvoicePrev - 1]) ||
+        (colInvoiceLink && r[colInvoiceLink - 1]) ||
+        (colInvoicePrev && r[colInvoicePrev - 1]) ||
         (colOrderTotalEgp && Number(r[colOrderTotalEgp - 1] || 0) > 0);
 
       if (!hasInvoice) return;
@@ -658,29 +661,29 @@ function syncPurchasesToShipmentsCnUae() {
       /** @type {Object<string, any>} */
       const rowObj = {};
 
-      rowObj['Shipment ID']          = shipmentId;
-      rowObj['Supplier / Factory']   = colSeller ? (r[colSeller - 1] || '') : '';
-      rowObj['Forwarder']            = colPlatform ? (r[colPlatform - 1] || '') : '';
+      rowObj['Shipment ID'] = shipmentId;
+      rowObj['Supplier / Factory'] = colSeller ? (r[colSeller - 1] || '') : '';
+      rowObj['Forwarder'] = colPlatform ? (r[colPlatform - 1] || '') : '';
       rowObj['Tracking / Container'] = '';
-      rowObj['Purchases Line ID']    = lineId;
+      rowObj['Purchases Line ID'] = lineId;
 
-      rowObj['Order ID (Batch)']     = orderId;
+      rowObj['Order ID (Batch)'] = orderId;
 
       const orderDate = colOrderDate ? r[colOrderDate - 1] : null;
-      rowObj['Ship Date']            = (orderDate instanceof Date) ? orderDate : new Date();
-      rowObj['ETA']                  = '';
-      rowObj['Actual Arrival']       = '';
+      rowObj['Ship Date'] = (orderDate instanceof Date) ? orderDate : new Date();
+      rowObj['ETA'] = '';
+      rowObj['Actual Arrival'] = '';
 
-      rowObj['SKU']             = sku;
-      rowObj['Product Name']    = colProduct ? (r[colProduct - 1] || '') : '';
+      rowObj['SKU'] = sku;
+      rowObj['Product Name'] = colProduct ? (r[colProduct - 1] || '') : '';
       rowObj['Variant / Color'] = variant || '';
-      rowObj['Qty']             = qty;
+      rowObj['Qty'] = qty;
 
       rowObj['Gross Weight (kg)'] = '';
-      rowObj['Volume (CBM)']      = '';
-      rowObj['Freight (AED)']     = '';
-      rowObj['Other Fees (AED)']  = '';
-      rowObj['Total Cost (AED)']  = '';
+      rowObj['Volume (CBM)'] = '';
+      rowObj['Freight (AED)'] = '';
+      rowObj['Other Fees (AED)'] = '';
+      rowObj['Total Cost (AED)'] = '';
 
       rowObj['Notes'] = 'Auto (line-level) from Purchases';
 
@@ -736,7 +739,7 @@ function syncPurchasesToShipmentsCnUae() {
             }
           });
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Append new rows
@@ -746,8 +749,8 @@ function syncPurchasesToShipmentsCnUae() {
     }
 
     if (newRows.length || updatedQtyCount) {
-      try { rebuildShipmentsCnUaeStatus_(); } catch (e) {}
-      try { setupShipmentsCnUaeStatusValidation_(); } catch (e) {}
+      try { rebuildShipmentsCnUaeStatus_(); } catch (e) { }
+      try { setupShipmentsCnUaeStatusValidation_(); } catch (e) { }
     }
 
     safeAlert_(
@@ -779,7 +782,7 @@ function resolveUaeWarehouseFromCourier_(courierRaw) {
 
   // لو المستخدم كتب الكود مباشرة
   if (s.indexOf('uae-attia') !== -1) return 'UAE-ATTIA';
-  if (s.indexOf('uae-kor')   !== -1) return 'UAE-KOR';
+  if (s.indexOf('uae-kor') !== -1) return 'UAE-KOR';
 
   // أسماء عربية/إنجليزية
   if (s.indexOf('attia') !== -1 || s.indexOf('عطية') !== -1 || s.indexOf('عطيه') !== -1) {
@@ -806,14 +809,14 @@ function _getInventoryUaeInfoForSku_(sku, optWarehouse) {
     if (!normalizedSku) return null;
 
     const invSh = getSheet_(APP.SHEETS.INVENTORY_UAE);
-    const map   = getHeaderMap_(invSh);
+    const map = getHeaderMap_(invSh);
 
-    const colSku     = map['SKU'];
-    const colWh      = map['Warehouse (UAE)'];
+    const colSku = map['SKU'];
+    const colWh = map['Warehouse (UAE)'];
     const colProduct = map['Product Name'];
-    const colVar     = map['Variant / Color'];
-    const colOnHand  = map['On Hand Qty'];
-    const colAvail   = map['Available Qty'];
+    const colVar = map['Variant / Color'];
+    const colOnHand = map['On Hand Qty'];
+    const colAvail = map['Available Qty'];
     const colAvgCost = map['Avg Cost (EGP)'];
 
     if (!colSku || !colWh) return null;
@@ -841,11 +844,11 @@ function _getInventoryUaeInfoForSku_(sku, optWarehouse) {
 
       const info = {
         productName: colProduct ? (row[colProduct - 1] || '') : '',
-        variant:     colVar     ? (row[colVar     - 1] || '') : '',
-        warehouse:   rowWhRaw,
-        onHand:      colOnHand ? Number(row[colOnHand - 1] || 0) : 0,
-        available:   colAvail  ? Number(row[colAvail  - 1] || 0) : 0,
-        avgCost:     colAvgCost ? Number(row[colAvgCost - 1] || 0) : 0
+        variant: colVar ? (row[colVar - 1] || '') : '',
+        warehouse: rowWhRaw,
+        onHand: colOnHand ? Number(row[colOnHand - 1] || 0) : 0,
+        available: colAvail ? Number(row[colAvail - 1] || 0) : 0,
+        avgCost: colAvgCost ? Number(row[colAvgCost - 1] || 0) : 0
       };
 
       // لو محدد Warehouse معين
@@ -885,12 +888,12 @@ function _getInventoryUaeInfoForSku_(sku, optWarehouse) {
 function _fillShipmentUaeEgFromInventory_(sh, rowIndex, headerMapOpt) {
   const map = headerMapOpt || getHeaderMap_(sh);
 
-  const colSku     = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
-  const colProd    = map['Product Name'];
-  const colVar     = map['Variant / Color'];
-  const colNotes   = map['Notes'];
+  const colSku = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
+  const colProd = map['Product Name'];
+  const colVar = map['Variant / Color'];
+  const colNotes = map['Notes'];
   const colCourier = map['Courier'] || map['Courier Name'];
-  const colWhUae   = map['Warehouse (UAE)']; // اختياري في Shipments_UAE_EG
+  const colWhUae = map['Warehouse (UAE)']; // اختياري في Shipments_UAE_EG
 
   if (!colSku) return;
 
@@ -898,8 +901,8 @@ function _fillShipmentUaeEgFromInventory_(sh, rowIndex, headerMapOpt) {
 
   // If SKU cleared → clear related cells
   if (!sku) {
-    if (colProd)  sh.getRange(rowIndex, colProd).clearContent();
-    if (colVar)   sh.getRange(rowIndex, colVar).clearContent();
+    if (colProd) sh.getRange(rowIndex, colProd).clearContent();
+    if (colVar) sh.getRange(rowIndex, colVar).clearContent();
     if (colNotes) sh.getRange(rowIndex, colNotes).setNote('');
     // مش هنلعب في Warehouse (UAE) / Courier هنا
     return;
@@ -922,8 +925,8 @@ function _fillShipmentUaeEgFromInventory_(sh, rowIndex, headerMapOpt) {
   const info = _getInventoryUaeInfoForSku_(sku, whHint);
 
   if (!info) {
-    if (colProd)  sh.getRange(rowIndex, colProd).setValue('');
-    if (colVar)   sh.getRange(rowIndex, colVar).setValue('');
+    if (colProd) sh.getRange(rowIndex, colProd).setValue('');
+    if (colVar) sh.getRange(rowIndex, colVar).setValue('');
     if (colNotes) {
       sh.getRange(rowIndex, colNotes)
         .setNote('SKU not found in Inventory_UAE.');
@@ -932,7 +935,7 @@ function _fillShipmentUaeEgFromInventory_(sh, rowIndex, headerMapOpt) {
   }
 
   if (colProd) sh.getRange(rowIndex, colProd).setValue(info.productName);
-  if (colVar)  sh.getRange(rowIndex, colVar).setValue(info.variant);
+  if (colVar) sh.getRange(rowIndex, colVar).setValue(info.variant);
 
   // لو Warehouse (UAE) فاضي في Shipments_UAE_EG → املاه باللي جاي من Inventory_UAE
   if (colWhUae) {
@@ -974,7 +977,7 @@ function _fillShipmentUaeEgFromInventory_(sh, rowIndex, headerMapOpt) {
  */
 function backfillShipmentsUaeEgFromInventory() {
   try {
-    const sh  = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+    const sh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
     const map = getHeaderMap_(sh);
 
     const colSku = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
@@ -998,6 +1001,177 @@ function backfillShipmentsUaeEgFromInventory() {
 }
 
 /**
+ * Seed Shipments_UAE_EG planning rows from Inventory_UAE.
+ * - Creates/updates rows where Shipment ID is blank (planning rows)
+ * - Key = SKU + Warehouse (UAE)
+ * - Qty remains 0 (you fill shipped qty when you actually ship)
+ */
+function seedShipmentsUaeEgFromInventoryUae() {
+  try {
+    ensureErrorLog_();
+
+    const invSh = getSheet_(APP.SHEETS.INVENTORY_UAE);
+    const shipSh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+
+    // Repair known blank header (Status → Warehouse (UAE)) and ensure required schema additions (e.g., Line ID).
+    try {
+      if (typeof SHIP_UAE_EG_HEADERS !== 'undefined') {
+        repairBlankHeadersByPosition_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, 1);
+        ensureSheetSchema_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, { addMissing: true });
+      }
+    } catch (e) {
+      logError_('seedShipmentsUaeEgFromInventoryUae.preflight', e);
+    }
+
+    const invMap = getHeaderMap_(invSh);
+    const shipMap = getHeaderMap_(shipSh);
+
+    const invSkuCol = invMap[APP.COLS.INV_UAE.SKU];
+    const invWhCol = invMap[APP.COLS.INV_UAE.WAREHOUSE];
+    const invPnCol = invMap[APP.COLS.INV_UAE.PRODUCT_NAME];
+    const invVarCol = invMap[APP.COLS.INV_UAE.VARIANT];
+    const invQtyCol = invMap[APP.COLS.INV_UAE.ON_HAND];
+
+    const shipIdCol = shipMap[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID];
+    const shipWhCol = shipMap[APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE];
+    const shipSkuCol = shipMap[APP.COLS.SHIP_UAE_EG.SKU];
+    const shipPnCol = shipMap[APP.COLS.SHIP_UAE_EG.PRODUCT_NAME];
+    const shipVarCol = shipMap[APP.COLS.SHIP_UAE_EG.VARIANT];
+    const shipQtyCol = shipMap[APP.COLS.SHIP_UAE_EG.QTY];
+    const shipQtySyncedCol = shipMap[APP.COLS.SHIP_UAE_EG.QTY_SYNCED];
+    const shipStatusCol = shipMap[APP.COLS.SHIP_UAE_EG.STATUS];
+    const shipNotesCol = shipMap['Notes'];
+
+    if (!invSkuCol || !invWhCol) throw new Error('Inventory_UAE missing required headers (SKU/Warehouse).');
+    if (!shipIdCol || !shipWhCol || !shipSkuCol) {
+      const err = new Error('Shipments_UAE_EG missing required headers (Shipment ID / Warehouse (UAE) / SKU). Run Setup Shipments Layouts.');
+      logError_('seedShipmentsUaeEgFromInventoryUae', err, {
+        hasShipmentId: !!shipIdCol,
+        hasWarehouseUAE: !!shipWhCol,
+        hasSku: !!shipSkuCol
+      });
+      return; // non-fatal: allow snapshot rebuild to continue
+    }
+
+    const invLast = invSh.getLastRow();
+    if (invLast < 2) return;
+
+    const invData = invSh.getRange(2, 1, invLast - 1, invSh.getLastColumn()).getValues();
+
+    // Build inventory map: key = SKU||WH
+    const invByKey = new Map();
+    for (const r of invData) {
+      const sku = String(r[invSkuCol - 1] || '').trim();
+      const wh = normalizeWarehouseCode_(r[invWhCol - 1]);
+      if (!sku || !wh) continue;
+
+      const onHand = invQtyCol ? Number(r[invQtyCol - 1] || 0) : 0;
+      if (onHand <= 0) continue; // seed only what exists
+
+      invByKey.set(`${sku}||${wh}`, {
+        sku,
+        wh,
+        productName: invPnCol ? String(r[invPnCol - 1] || '').trim() : '',
+        variant: invVarCol ? String(r[invVarCol - 1] || '').trim() : '',
+        onHand
+      });
+    }
+
+    if (invByKey.size === 0) return;
+
+    // Read shipments existing rows
+    const shipLast = shipSh.getLastRow();
+    const shipCols = shipSh.getLastColumn();
+    const shipData = shipLast >= 2 ? shipSh.getRange(2, 1, shipLast - 1, shipCols).getValues() : [];
+
+    // Index existing planning rows (Shipment ID blank): key = SKU||WH => rowIndex
+    const existingPlanRowByKey = new Map();
+    for (let i = 0; i < shipData.length; i++) {
+      const row = shipData[i];
+      const shipId = String(row[shipIdCol - 1] || '').trim();
+      if (shipId) continue; // only planning rows
+
+      const sku = String(row[shipSkuCol - 1] || '').trim();
+      const wh = normalizeWarehouseCode_(row[shipWhCol - 1]);
+      if (!sku || !wh) continue;
+
+      existingPlanRowByKey.set(`${sku}||${wh}`, i);
+    }
+
+    // Update existing planning rows + append new ones
+    const rowsToWrite = [];
+    const rowNumbersToWrite = []; // 2-based sheet row number
+
+    // Update existing
+    for (const [key, info] of invByKey.entries()) {
+      if (!existingPlanRowByKey.has(key)) continue;
+
+      const i = existingPlanRowByKey.get(key);
+      const row = shipData[i];
+
+      // Fill standard fields but don't touch user-entered qty/shipping fields
+      row[shipWhCol - 1] = info.wh;
+      row[shipSkuCol - 1] = info.sku;
+
+      if (shipPnCol && !String(row[shipPnCol - 1] || '').trim()) row[shipPnCol - 1] = info.productName;
+      if (shipVarCol && !String(row[shipVarCol - 1] || '').trim()) row[shipVarCol - 1] = info.variant;
+
+      if (shipQtyCol && !Number(row[shipQtyCol - 1] || 0)) row[shipQtyCol - 1] = 0;
+      if (shipQtySyncedCol && !Number(row[shipQtySyncedCol - 1] || 0)) row[shipQtySyncedCol - 1] = 0;
+
+      if (shipStatusCol && !String(row[shipStatusCol - 1] || '').trim()) row[shipStatusCol - 1] = 'Planned';
+
+      if (shipNotesCol) {
+        const note = `Seeded from Inventory_UAE (OnHand: ${info.onHand})`;
+        if (!String(row[shipNotesCol - 1] || '').includes('Seeded from Inventory_UAE')) {
+          row[shipNotesCol - 1] = note;
+        }
+      }
+
+      rowsToWrite.push(row);
+      rowNumbersToWrite.push(i + 2); // +2 because data starts at row 2
+    }
+
+    // Append missing planning rows
+    const headerRow = shipSh.getRange(1, 1, 1, shipCols).getValues()[0];
+    const headerIndex = {};
+    headerRow.forEach((h, idx) => headerIndex[String(h || '').trim()] = idx);
+
+    const newRows = [];
+    for (const [key, info] of invByKey.entries()) {
+      if (existingPlanRowByKey.has(key)) continue;
+
+      const newRow = new Array(shipCols).fill('');
+      newRow[shipIdCol - 1] = '';                // planning row
+      newRow[shipWhCol - 1] = info.wh;
+      newRow[shipSkuCol - 1] = info.sku;
+      if (shipPnCol) newRow[shipPnCol - 1] = info.productName;
+      if (shipVarCol) newRow[shipVarCol - 1] = info.variant;
+      if (shipQtyCol) newRow[shipQtyCol - 1] = 0;
+      if (shipQtySyncedCol) newRow[shipQtySyncedCol - 1] = 0;
+      if (shipStatusCol) newRow[shipStatusCol - 1] = 'Planned';
+      if (shipNotesCol) newRow[shipNotesCol - 1] = `Seeded from Inventory_UAE (OnHand: ${info.onHand})`;
+
+      newRows.push(newRow);
+    }
+
+    // Write updates (row-by-row, but only the changed rows)
+    for (let k = 0; k < rowsToWrite.length; k++) {
+      shipSh.getRange(rowNumbersToWrite[k], 1, 1, shipCols).setValues([rowsToWrite[k]]);
+    }
+
+    // Append new ones in a single batch
+    if (newRows.length) {
+      shipSh.getRange(shipSh.getLastRow() + 1, 1, newRows.length, shipCols).setValues(newRows);
+    }
+
+  } catch (e) {
+    logError_('seedShipmentsUaeEgFromInventoryUae', e);
+    throw e;
+  }
+}
+
+/**
  * Recalculate Total Cost + Status + stock warning for a single row in Shipments_UAE_EG.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sh
@@ -1007,42 +1181,42 @@ function backfillShipmentsUaeEgFromInventory() {
 function _updateShipmentUaeEgRowTotalsAndStatus_(sh, rowIndex, headerMapOpt) {
   const map = headerMapOpt || getHeaderMap_(sh);
 
-  const colQty      = map[APP.COLS.SHIP_UAE_EG.QTY] ||
-                      map['Qty'];
+  const colQty = map[APP.COLS.SHIP_UAE_EG.QTY] ||
+    map['Qty'];
   const colShipCost = map[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
-                      map['Ship Cost (EGP) - per unit or box'] ||
-                      map['Ship Cost (EGP)'];
-  const colCustoms  = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
-                      map['Customs (EGP)'] ||
-                      map['Customs / Clearance (EGP)'];
-  const colOther    = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
-                      map['Other (EGP)'] ||
-                      map['Other Fees (EGP)'];
-  const colTotal    = map[APP.COLS.SHIP_UAE_EG.TOTAL_COST] ||
-                      map['Total Cost (EGP)'];
+    map['Ship Cost (EGP) - per unit or box'] ||
+    map['Ship Cost (EGP)'];
+  const colCustoms = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
+    map['Customs (EGP)'] ||
+    map['Customs / Clearance (EGP)'];
+  const colOther = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
+    map['Other (EGP)'] ||
+    map['Other Fees (EGP)'];
+  const colTotal = map[APP.COLS.SHIP_UAE_EG.TOTAL_COST] ||
+    map['Total Cost (EGP)'];
 
   const colShipDate = map[APP.COLS.SHIP_UAE_EG.SHIP_DATE] ||
-                      map['Ship Date'] ||
-                      map['Ship Date (UAE)'];
-  const colEta      = map[APP.COLS.SHIP_UAE_EG.ETA] ||
-                      map['ETA'];
-  const colArr      = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] ||
-                      map['Actual Arrival'] ||
-                      map['Actual Arrival (EG)'];
-  const colStatus   = map[APP.COLS.SHIP_UAE_EG.STATUS] ||
-                      map['Status'];
+    map['Ship Date'] ||
+    map['Ship Date (UAE)'];
+  const colEta = map[APP.COLS.SHIP_UAE_EG.ETA] ||
+    map['ETA'];
+  const colArr = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] ||
+    map['Actual Arrival'] ||
+    map['Actual Arrival (EG)'];
+  const colStatus = map[APP.COLS.SHIP_UAE_EG.STATUS] ||
+    map['Status'];
 
-  const colSku      = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
-  const colNotes    = map['Notes'];
-  const colCourier  = map['Courier'] || map['Courier Name'];
+  const colSku = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
+  const colNotes = map['Notes'];
+  const colCourier = map['Courier'] || map['Courier Name'];
 
   const row = sh.getRange(rowIndex, 1, 1, sh.getLastColumn()).getValues()[0];
 
   // ----- Total Cost (EGP) -----
-  const qty      = colQty      ? Number(row[colQty - 1]      || 0) : 0;
+  const qty = colQty ? Number(row[colQty - 1] || 0) : 0;
   const shipCost = colShipCost ? Number(row[colShipCost - 1] || 0) : 0;
-  const customs  = colCustoms  ? Number(row[colCustoms - 1]  || 0) : 0;
-  const other    = colOther    ? Number(row[colOther - 1]    || 0) : 0;
+  const customs = colCustoms ? Number(row[colCustoms - 1] || 0) : 0;
+  const other = colOther ? Number(row[colOther - 1] || 0) : 0;
 
   if (colTotal) {
     const totalShipment = (shipCost * qty) + customs + other;
@@ -1052,17 +1226,17 @@ function _updateShipmentUaeEgRowTotalsAndStatus_(sh, rowIndex, headerMapOpt) {
 
   // ----- Status -----
   const ship = colShipDate ? row[colShipDate - 1] : '';
-  const eta  = colEta      ? row[colEta - 1]      : '';
-  const arr  = colArr      ? row[colArr - 1]      : '';
+  const eta = colEta ? row[colEta - 1] : '';
+  const arr = colArr ? row[colArr - 1] : '';
 
   let status = '';
 
   if (arr) {
     status = SHIPMENT_STATUS.ARRIVED_EG;
   } else if (ship && eta) {
-    const today    = new Date();
+    const today = new Date();
     const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const etaMid   = new Date(eta.getFullYear(), eta.getMonth(), eta.getDate());
+    const etaMid = new Date(eta.getFullYear(), eta.getMonth(), eta.getDate());
     status = (etaMid < todayMid)
       ? SHIPMENT_STATUS.DELAYED
       : SHIPMENT_STATUS.IN_TRANSIT;
@@ -1119,7 +1293,7 @@ function shipmentsUaeEgOnEdit_(e) {
   try {
     if (!e || !e.range) return;
 
-    const sh        = e.range.getSheet();
+    const sh = e.range.getSheet();
     const sheetName = sh.getName();
 
     if (sheetName !== APP.SHEETS.SHIP_UAE_EG && sheetName !== 'Shipments_UAE_EG') {
@@ -1131,27 +1305,27 @@ function shipmentsUaeEgOnEdit_(e) {
 
     const map = getHeaderMap_(sh);
 
-    const colSku      = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
-    const colQty      = map[APP.COLS.SHIP_UAE_EG.QTY] ||
-                        map['Qty'];
+    const colSku = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
+    const colQty = map[APP.COLS.SHIP_UAE_EG.QTY] ||
+      map['Qty'];
     const colShipCost = map[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
-                        map['Ship Cost (EGP) - per unit or box'] ||
-                        map['Ship Cost (EGP)'];
-    const colCustoms  = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
-                        map['Customs (EGP)'] ||
-                        map['Customs / Clearance (EGP)'];
-    const colOther    = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
-                        map['Other (EGP)'] ||
-                        map['Other Fees (EGP)'];
+      map['Ship Cost (EGP) - per unit or box'] ||
+      map['Ship Cost (EGP)'];
+    const colCustoms = map[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
+      map['Customs (EGP)'] ||
+      map['Customs / Clearance (EGP)'];
+    const colOther = map[APP.COLS.SHIP_UAE_EG.OTHER] ||
+      map['Other (EGP)'] ||
+      map['Other Fees (EGP)'];
 
     const colShipDate = map[APP.COLS.SHIP_UAE_EG.SHIP_DATE] ||
-                        map['Ship Date'] ||
-                        map['Ship Date (UAE)'];
-    const colEta      = map[APP.COLS.SHIP_UAE_EG.ETA] ||
-                        map['ETA'];
-    const colArr      = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] ||
-                        map['Actual Arrival'] ||
-                        map['Actual Arrival (EG)'];
+      map['Ship Date'] ||
+      map['Ship Date (UAE)'];
+    const colEta = map[APP.COLS.SHIP_UAE_EG.ETA] ||
+      map['ETA'];
+    const colArr = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] ||
+      map['Actual Arrival'] ||
+      map['Actual Arrival (EG)'];
 
     const editedCol = e.range.getColumn();
 
@@ -1194,32 +1368,18 @@ function shipmentsUaeEgOnEdit_(e) {
  */
 function qc_generateFromPurchasesPrompt() {
   try {
-    const ui = SpreadsheetApp.getUi();
-    const resp = ui.prompt(
-      'Generate QC_UAE rows from Purchases',
-      'Enter a single Order ID to generate QC rows for.\n' +
-      'Leave empty to generate for ALL orders that do not yet have QC rows.',
-      ui.ButtonSet.OK_CANCEL
-    );
-
-    if (resp.getSelectedButton() !== ui.Button.OK) {
-      return; // user cancelled
-    }
-
-    const orderIdText  = (resp.getResponseText() || '').trim();
-    const orderIdFilter = orderIdText || null;
-
-    const result = qc_generateFromPurchases_(orderIdFilter) || { added: 0, skipped: 0 };
-
-    ui.alert(
-      'QC_UAE generation done.\n\n' +
-      'New QC rows added: ' + result.added + '\n' +
-      'Existing rows skipped: ' + result.skipped
-    );
-
-  } catch (e) {
-    logError_('qc_generateFromPurchasesPrompt', e);
-    throw e;
+    const orderIdFilter = (typeof safePromptText_ === 'function')
+      ? safePromptText_(
+        'Generate QC_UAE',
+        'Optional: Enter a single Order ID to generate QC only for that order.\n\nLeave empty to generate QC for all eligible orders.'
+        , null, { ui: true })
+      : null;
+    if (orderIdFilter === null) return;
+    qc_generateFromPurchases_(orderIdFilter || null);
+    if (typeof safeAlert_ === 'function') safeAlert_('QC_UAE generation triggered.', null, { ui: true });
+  } catch (err) {
+    logError_('qc_generateFromPurchasesPrompt', err);
+    throw err;
   }
 }
 
@@ -1246,11 +1406,11 @@ function qc_generateFromPurchasesPrompt() {
 function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
   try {
     const purchSh = getSheet_(APP.SHEETS.PURCHASES);
-    const qcSh    = getSheet_(APP.SHEETS.QC_UAE);
-    const shipSh  = getSheet_(APP.SHEETS.SHIP_CN_UAE);
+    const qcSh = getSheet_(APP.SHEETS.QC_UAE);
+    const shipSh = getSheet_(APP.SHEETS.SHIP_CN_UAE);
 
-    const pMap    = getHeaderMap_(purchSh);
-    const qcMap   = getHeaderMap_(qcSh);
+    const pMap = getHeaderMap_(purchSh);
+    const qcMap = getHeaderMap_(qcSh);
     const shipMap = getHeaderMap_(shipSh);
 
     const lastPurRow = purchSh.getLastRow();
@@ -1264,17 +1424,17 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       if (typeof purchases_ensureLineIds_ === 'function') {
         purchases_ensureLineIds_(purchSh, pMap, 2, lastPurRow - 1);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Purchases columns
     const colOrderId = pMap[APP.COLS.PURCHASES.ORDER_ID] || pMap['Order ID'];
-    const colSku     = pMap[APP.COLS.PURCHASES.SKU]      || pMap['SKU'];
-    const colQty     = pMap[APP.COLS.PURCHASES.QTY]      || pMap['Qty'];
-    const colLineId  = pMap[APP.COLS.PURCHASES.LINE_ID]  || pMap['Line ID'];
+    const colSku = pMap[APP.COLS.PURCHASES.SKU] || pMap['SKU'];
+    const colQty = pMap[APP.COLS.PURCHASES.QTY] || pMap['Qty'];
+    const colLineId = pMap[APP.COLS.PURCHASES.LINE_ID] || pMap['Line ID'];
 
     const colProduct = pMap[APP.COLS.PURCHASES.PRODUCT_NAME] || pMap[APP.COLS.PURCHASES.PRODUCT] || pMap['Product Name'];
-    const colVariant = pMap[APP.COLS.PURCHASES.VARIANT]      || pMap['Variant / Color'];
-    const colBatch   = pMap[APP.COLS.PURCHASES.BATCH_CODE]   || pMap['Batch Code'];
+    const colVariant = pMap[APP.COLS.PURCHASES.VARIANT] || pMap['Variant / Color'];
+    const colBatch = pMap[APP.COLS.PURCHASES.BATCH_CODE] || pMap['Batch Code'];
 
     if (!colOrderId || !colSku || !colQty) {
       throw new Error('Missing required Purchases columns (Order ID / SKU / Qty).');
@@ -1288,20 +1448,20 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       .getValues();
 
     // QC columns
-    const qcColQcId        = qcMap[APP.COLS.QC_UAE.QC_ID]    || qcMap['QC ID'];
-    const qcColOrderId     = qcMap[APP.COLS.QC_UAE.ORDER_ID] || qcMap['Order ID'];
-    const qcColShipId      = qcMap[APP.COLS.QC_UAE.SHIPMENT_ID] || qcMap['Shipment CN→UAE ID'] || qcMap['Shipment ID'];
-    const qcColSku         = qcMap[APP.COLS.QC_UAE.SKU]      || qcMap['SKU'];
-    const qcColBatch       = qcMap[APP.COLS.QC_UAE.BATCH_CODE] || qcMap['Batch Code'];
-    const qcColProduct     = qcMap['Product Name'] || qcMap[APP.COLS.QC_UAE.PRODUCT_NAME] || qcMap[APP.COLS.PURCHASES.PRODUCT_NAME];
-    const qcColVariant     = qcMap['Variant / Color'] || qcMap[APP.COLS.QC_UAE.VARIANT] || qcMap[APP.COLS.PURCHASES.VARIANT];
-    const qcColQtyOrdered  = qcMap['Qty Ordered'] || qcMap[APP.COLS.QC_UAE.QTY_ORDERED];
+    const qcColQcId = qcMap[APP.COLS.QC_UAE.QC_ID] || qcMap['QC ID'];
+    const qcColOrderId = qcMap[APP.COLS.QC_UAE.ORDER_ID] || qcMap['Order ID'];
+    const qcColShipId = qcMap[APP.COLS.QC_UAE.SHIPMENT_ID] || qcMap['Shipment CN→UAE ID'] || qcMap['Shipment ID'];
+    const qcColSku = qcMap[APP.COLS.QC_UAE.SKU] || qcMap['SKU'];
+    const qcColBatch = qcMap[APP.COLS.QC_UAE.BATCH_CODE] || qcMap['Batch Code'];
+    const qcColProduct = qcMap['Product Name'] || qcMap[APP.COLS.QC_UAE.PRODUCT_NAME] || qcMap[APP.COLS.PURCHASES.PRODUCT_NAME];
+    const qcColVariant = qcMap['Variant / Color'] || qcMap[APP.COLS.QC_UAE.VARIANT] || qcMap[APP.COLS.PURCHASES.VARIANT];
+    const qcColQtyOrdered = qcMap['Qty Ordered'] || qcMap[APP.COLS.QC_UAE.QTY_ORDERED];
     const qcColPurchLineId = qcMap[APP.COLS.QC_UAE.PURCHASE_LINE_ID] || qcMap['Purchases Line ID'];
 
     const qcColQtyReceived = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
-    const qcColQtyDef      = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
-    const qcColQtyMissing  = qcMap[APP.COLS.QC_UAE.QTY_MISSING] || qcMap['Qty Missing'];
-    const qcColQtyOk       = qcMap[APP.COLS.QC_UAE.QTY_OK] || qcMap['Qty OK'];
+    const qcColQtyDef = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
+    const qcColQtyMissing = qcMap[APP.COLS.QC_UAE.QTY_MISSING] || qcMap['Qty Missing'];
+    const qcColQtyOk = qcMap[APP.COLS.QC_UAE.QTY_OK] || qcMap['Qty OK'];
 
     if (!qcColPurchLineId) {
       throw new Error('Missing QC_UAE column "Purchases Line ID". Run Logistics → Setup QC Layouts.');
@@ -1311,55 +1471,55 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
     }
 
     // Shipments map (prefer line-level) + ARRIVED gate
-    const shipColShipId  = shipMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || shipMap['Shipment ID'];
+    const shipColShipId = shipMap[APP.COLS.SHIP_CN_UAE.SHIPMENT_ID] || shipMap['Shipment ID'];
     const shipColOrderId = shipMap[APP.COLS.SHIP_CN_UAE.ORDER_BATCH] || shipMap['Order ID (Batch)'] || shipMap['Order ID'];
-    const shipColSku     = shipMap[APP.COLS.SHIP_CN_UAE.SKU] || shipMap['SKU'];
+    const shipColSku = shipMap[APP.COLS.SHIP_CN_UAE.SKU] || shipMap['SKU'];
     const shipColVariant = shipMap[APP.COLS.SHIP_CN_UAE.VARIANT] || shipMap['Variant / Color'];
-    const shipColLineId  = shipMap[APP.COLS.SHIP_CN_UAE.PURCHASE_LINE_ID] || shipMap['Purchases Line ID'];
-    const shipColStatus  = shipMap[APP.COLS.SHIP_CN_UAE.STATUS] || shipMap['Status'];
+    const shipColLineId = shipMap[APP.COLS.SHIP_CN_UAE.PURCHASE_LINE_ID] || shipMap['Purchases Line ID'];
+    const shipColStatus = shipMap[APP.COLS.SHIP_CN_UAE.STATUS] || shipMap['Status'];
     const shipColArrival = shipMap[APP.COLS.SHIP_CN_UAE.ARRIVAL] || shipMap['Actual Arrival'];
 
     const shipIdByLineId = {};
-    const shipIdByKey    = {};
-    
-   // Eligibility (only Arrived UAE lines / keys)
-   const arrivedShipIdByLineId = {};
-   const arrivedShipIdByKey    = {};
+    const shipIdByKey = {};
 
-   const shipLastRow = shipSh.getLastRow();
-   if (shipLastRow >= 2 && shipColShipId) {
-     const shipData = shipSh.getRange(2, 1, shipLastRow - 1, shipSh.getLastColumn()).getValues();
+    // Eligibility (only Arrived UAE lines / keys)
+    const arrivedShipIdByLineId = {};
+    const arrivedShipIdByKey = {};
 
-     shipData.forEach(function (r) {
-       const sid = String(r[shipColShipId - 1] || '').trim();
-       if (!sid) return;
+    const shipLastRow = shipSh.getLastRow();
+    if (shipLastRow >= 2 && shipColShipId) {
+      const shipData = shipSh.getRange(2, 1, shipLastRow - 1, shipSh.getLastColumn()).getValues();
 
-       const oid = shipColOrderId ? String(r[shipColOrderId - 1] || '').trim() : '';
-       const sku = shipColSku ? String(r[shipColSku - 1] || '').trim() : '';
-       const v   = shipColVariant ? String(r[shipColVariant - 1] || '').trim() : '';
+      shipData.forEach(function (r) {
+        const sid = String(r[shipColShipId - 1] || '').trim();
+        if (!sid) return;
 
-       const status = shipColStatus ? String(r[shipColStatus - 1] || '').trim() : '';
-       const arrival = shipColArrival ? r[shipColArrival - 1] : null;
+        const oid = shipColOrderId ? String(r[shipColOrderId - 1] || '').trim() : '';
+        const sku = shipColSku ? String(r[shipColSku - 1] || '').trim() : '';
+        const v = shipColVariant ? String(r[shipColVariant - 1] || '').trim() : '';
 
-       const isArrivedUAE = !!arrival || status === 'Arrived UAE';
+        const status = shipColStatus ? String(r[shipColStatus - 1] || '').trim() : '';
+        const arrival = shipColArrival ? r[shipColArrival - 1] : null;
 
-      // Line-level key
-      if (shipColLineId) {
-        const lid = String(r[shipColLineId - 1] || '').trim();
-        if (lid) {
-          if (!shipIdByLineId[lid]) shipIdByLineId[lid] = sid;
-          if (isArrivedUAE && !arrivedShipIdByLineId[lid]) arrivedShipIdByLineId[lid] = sid;
+        const isArrivedUAE = !!arrival || status === 'Arrived UAE';
+
+        // Line-level key
+        if (shipColLineId) {
+          const lid = String(r[shipColLineId - 1] || '').trim();
+          if (lid) {
+            if (!shipIdByLineId[lid]) shipIdByLineId[lid] = sid;
+            if (isArrivedUAE && !arrivedShipIdByLineId[lid]) arrivedShipIdByLineId[lid] = sid;
+          }
         }
-      }
 
-     // Fallback key (order+sku+variant)
-     if (oid && sku) {
-       const key = oid + '||' + sku + '||' + v;
-       if (!shipIdByKey[key]) shipIdByKey[key] = sid;
-       if (isArrivedUAE && !arrivedShipIdByKey[key]) arrivedShipIdByKey[key] = sid;
-     }
-   });
- }
+        // Fallback key (order+sku+variant)
+        if (oid && sku) {
+          const key = oid + '||' + sku + '||' + v;
+          if (!shipIdByKey[key]) shipIdByKey[key] = sid;
+          if (isArrivedUAE && !arrivedShipIdByKey[key]) arrivedShipIdByKey[key] = sid;
+        }
+      });
+    }
 
 
     // QC sheet metadata
@@ -1414,20 +1574,20 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
     const updates = [];
     const newRowsFull = [];
     const filterSet = (function () {
-  if (Array.isArray(optOrderIdOrOrderIds)) {
-    const set = {};
-    (optOrderIdOrOrderIds || []).forEach(function (x) {
-      const s = String(x || '').trim();
-      if (s) set[s] = true;
-    });
-    return Object.keys(set).length ? set : null;
-  }
-  const s = String(optOrderIdOrOrderIds || '').trim();
-  if (!s) return null;
-  const set = {};
-  set[s] = true;
-  return set;
-})();
+      if (Array.isArray(optOrderIdOrOrderIds)) {
+        const set = {};
+        (optOrderIdOrOrderIds || []).forEach(function (x) {
+          const s = String(x || '').trim();
+          if (s) set[s] = true;
+        });
+        return Object.keys(set).length ? set : null;
+      }
+      const s = String(optOrderIdOrOrderIds || '').trim();
+      if (!s) return null;
+      const set = {};
+      set[s] = true;
+      return set;
+    })();
 
     const seenInRun = {};
 
@@ -1447,7 +1607,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
 
       const variant = colVariant ? String(r[colVariant - 1] || '').trim() : '';
       const product = colProduct ? String(r[colProduct - 1] || '').trim() : '';
-      const batch   = colBatch ? String(r[colBatch - 1] || '').trim() : '';
+      const batch = colBatch ? String(r[colBatch - 1] || '').trim() : '';
 
       const shipKey = orderId + '||' + sku + '||' + variant;
 
@@ -1474,20 +1634,20 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       const qcId = 'QC-' + Utilities.formatString('%06d', maxSeq);
 
       const rowObj = {};
-      rowObj['QC ID']               = qcId;
-      rowObj['Order ID']            = orderId;
-      rowObj['Shipment CN→UAE ID']  = shipId;
-      rowObj['SKU']                 = sku;
-      rowObj['Batch Code']          = batch || '';
-      rowObj['Product Name']        = product || '';
-      rowObj['Variant / Color']     = variant || '';
-      rowObj['Qty Ordered']         = qty;
-      rowObj['Qty Received']        = '';
-      rowObj['Qty Defective']       = '';
-      rowObj['Qty Missing']         = '';
-      rowObj['Qty OK']              = '';
-      rowObj['Notes']               = 'Auto (line-level) from Purchases';
-      rowObj['Purchases Line ID']   = lineId;
+      rowObj['QC ID'] = qcId;
+      rowObj['Order ID'] = orderId;
+      rowObj['Shipment CN→UAE ID'] = shipId;
+      rowObj['SKU'] = sku;
+      rowObj['Batch Code'] = batch || '';
+      rowObj['Product Name'] = product || '';
+      rowObj['Variant / Color'] = variant || '';
+      rowObj['Qty Ordered'] = qty;
+      rowObj['Qty Received'] = '';
+      rowObj['Qty Defective'] = '';
+      rowObj['Qty Missing'] = '';
+      rowObj['Qty OK'] = '';
+      rowObj['Notes'] = 'Auto (line-level) from Purchases';
+      rowObj['Purchases Line ID'] = lineId;
 
       const outRow = qcHeaders.map(function (h) {
         return (rowObj[h] !== undefined) ? rowObj[h] : '';
@@ -1560,7 +1720,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
 
       segments.forEach(function (seg) {
         const startCol = seg.startCol;
-        const numCols  = seg.numCols;
+        const numCols = seg.numCols;
 
         const existingSeg = existingN
           ? qcSh.getRange(2, startCol, existingN, numCols).getValues()
@@ -1587,9 +1747,9 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
         const rowsToRecalc = Math.min(1000, (existingN + newRowsFull.length + 5));
         qc_recalcRows_(qcSh, 2, rowsToRecalc);
       }
-    } catch (e) {}
+    } catch (e) { }
 
-    try { setupQcWarehouseValidation_(); } catch (e) {}
+    try { setupQcWarehouseValidation_(); } catch (e) { }
 
     safeAlert_(
       'QC_UAE generation done.\n' +
@@ -1624,7 +1784,7 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
  */
 function qc_recalcQuantitiesAndResult(opts) {
   const options = opts || {};
-  const qcSh  = getSheet_(APP.SHEETS.QC_UAE);
+  const qcSh = getSheet_(APP.SHEETS.QC_UAE);
   const qcMap = getHeaderMap_(qcSh);
 
   const lastRow = qcSh.getLastRow();
@@ -1658,22 +1818,22 @@ function qcOnEdit_(e) {
   const qcMap = getHeaderMap_(sh);
 
   const colOrdered = qcMap['Qty Ordered'];
-  const colRecv    = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
-  const colDef     = qcMap[APP.COLS.QC_UAE.QTY_DEFECT]   || qcMap['Qty Defective'];
+  const colRecv = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
+  const colDef = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
 
   if (!colOrdered || !colRecv || !colDef) return;
 
   // Only react when edit intersects the driving columns
   const colStart = e.range.getColumn();
-  const colEnd   = colStart + e.range.getNumColumns() - 1;
+  const colEnd = colStart + e.range.getNumColumns() - 1;
 
   const drives = [colOrdered, colRecv, colDef];
   const intersects = drives.some(c => c >= colStart && c <= colEnd);
   if (!intersects) return;
 
   const rowStart = Math.max(2, e.range.getRow());
-  const rowEnd   = Math.max(rowStart, e.range.getRow() + e.range.getNumRows() - 1);
-  const numRows  = rowEnd - rowStart + 1;
+  const rowEnd = Math.max(rowStart, e.range.getRow() + e.range.getNumRows() - 1);
+  const numRows = rowEnd - rowStart + 1;
 
   qc_recalcRows_(sh, qcMap, rowStart, numRows, { silent: true, setDate: false, updateResult: true });
 }
@@ -1695,13 +1855,13 @@ function qc_recalcRows_(qcSh, qcMap, rowStart, numRows, opts) {
   const data = qcSh.getRange(start, 1, end - start + 1, lastCol).getValues();
 
   const idxAnchor = qcMap['QC ID'] || qcMap[APP.COLS.QC_UAE.QC_ID] || qcMap[APP.COLS.QC_UAE.ORDER_ID] || qcMap['Order ID'];
-  const idxOrd    = qcMap['Qty Ordered'];
-  const idxRecv   = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
-  const idxDef    = qcMap[APP.COLS.QC_UAE.QTY_DEFECT]   || qcMap['Qty Defective'];
-  const idxMiss   = qcMap[APP.COLS.QC_UAE.QTY_MISSING]  || qcMap['Qty Missing'];
-  const idxOk     = qcMap[APP.COLS.QC_UAE.QTY_OK]       || qcMap['Qty OK'];
-  const idxRes    = qcMap['QC Result'];
-  const idxDate   = qcMap['QC Date'];
+  const idxOrd = qcMap['Qty Ordered'];
+  const idxRecv = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
+  const idxDef = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
+  const idxMiss = qcMap[APP.COLS.QC_UAE.QTY_MISSING] || qcMap['Qty Missing'];
+  const idxOk = qcMap[APP.COLS.QC_UAE.QTY_OK] || qcMap['Qty OK'];
+  const idxRes = qcMap['QC Result'];
+  const idxDate = qcMap['QC Date'];
 
   if (!idxOrd || !idxRecv || !idxDef || !idxMiss || !idxOk) {
     throw new Error('qc_recalcRows_: Missing QC_UAE columns (Qty Ordered/Received/Defective/OK/Missing).');
@@ -1726,12 +1886,12 @@ function qc_recalcRows_(qcSh, qcMap, rowStart, numRows, opts) {
       continue;
     }
 
-    const qtyOrd  = Number(row[idxOrd - 1] || 0);
+    const qtyOrd = Number(row[idxOrd - 1] || 0);
     const qtyRecv = Number(row[idxRecv - 1] || 0);
-    const qtyDef  = Number(row[idxDef - 1] || 0);
+    const qtyDef = Number(row[idxDef - 1] || 0);
 
     const missing = Math.max(qtyOrd - qtyRecv, 0);
-    const ok      = Math.max(qtyRecv - qtyDef, 0);
+    const ok = Math.max(qtyRecv - qtyDef, 0);
 
     missOut.push([missing]);
     okOut.push([ok]);
@@ -1788,14 +1948,15 @@ function qc_recalcRows_(qcSh, qcMap, rowStart, numRows, opts) {
  *        UAE-ATTIA أو UAE-KOR أو UAE-DXB
  *    - لو فاضي → default = 'UAE-DXB'
  */
-function syncQCtoInventory_UAE() {
+function syncQCtoInventory_UAE(opts) {
+  const interactive = !!(opts && opts.interactive);
   try {
-    const qcSh     = getSheet_(APP.SHEETS.QC_UAE);
-    const purchSh  = getSheet_(APP.SHEETS.PURCHASES);
+    const qcSh = getSheet_(APP.SHEETS.QC_UAE);
+    const purchSh = getSheet_(APP.SHEETS.PURCHASES);
     const ledgerSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
 
-    const qcMap     = getHeaderMap_(qcSh);
-    const purchMap  = getHeaderMap_(purchSh);
+    const qcMap = getHeaderMap_(qcSh);
+    const purchMap = getHeaderMap_(purchSh);
     const ledgerMap = getHeaderMap_(ledgerSh);
 
     const lastQcRow = qcSh.getLastRow();
@@ -1803,46 +1964,75 @@ function syncQCtoInventory_UAE() {
 
     const qcData = qcSh.getRange(2, 1, lastQcRow - 1, qcSh.getLastColumn()).getValues();
 
-    const qcIdCol    = qcMap[APP.COLS.QC_UAE.QC_ID] || qcMap['QC ID'];
-    const qcDateCol  = qcMap[APP.COLS.QC_UAE.QC_DATE] || qcMap['QC Date'];
+    const qcIdCol = qcMap[APP.COLS.QC_UAE.QC_ID] || qcMap['QC ID'];
+    const qcDateCol = qcMap[APP.COLS.QC_UAE.QC_DATE] || qcMap['QC Date'];
 
     // ===== Build cost map from Purchases =====
     const purchLast = purchSh.getLastRow();
     const costMap = {};
+    const priceMap = {};
+    const currencyMap = {};
 
     if (purchLast >= 2) {
       const purchData = purchSh.getRange(2, 1, purchLast - 1, purchSh.getLastColumn()).getValues();
 
       const idxOrder = purchMap[APP.COLS.PURCHASES.ORDER_ID] ? purchMap[APP.COLS.PURCHASES.ORDER_ID] - 1 : null;
-      const idxSku   = purchMap[APP.COLS.PURCHASES.SKU]      ? purchMap[APP.COLS.PURCHASES.SKU]      - 1 : null;
+      const idxSku = purchMap[APP.COLS.PURCHASES.SKU] ? purchMap[APP.COLS.PURCHASES.SKU] - 1 : null;
       const idxBatch = purchMap[APP.COLS.PURCHASES.BATCH_CODE] ? purchMap[APP.COLS.PURCHASES.BATCH_CODE] - 1 : null;
 
       // Prefer Unit Landed Cost, fallback to Unit Price (EGP)
       const idxUnitLanded = purchMap[APP.COLS.PURCHASES.UNIT_LANDED] ? purchMap[APP.COLS.PURCHASES.UNIT_LANDED] - 1 : null;
-      const idxUnitNet    = purchMap[APP.COLS.PURCHASES.NET_UNIT_PRICE] ? purchMap[APP.COLS.PURCHASES.NET_UNIT_PRICE] - 1 : null;
+      const idxUnitNet = purchMap[APP.COLS.PURCHASES.NET_UNIT_PRICE] ? purchMap[APP.COLS.PURCHASES.NET_UNIT_PRICE] - 1 : null;
+      const idxTotalOrig = purchMap[APP.COLS.PURCHASES.TOTAL_ORIG] ? purchMap[APP.COLS.PURCHASES.TOTAL_ORIG] - 1 : null;
+      const idxQty = purchMap[APP.COLS.PURCHASES.QTY] ? purchMap[APP.COLS.PURCHASES.QTY] - 1 : null;
+      const idxCurrency = purchMap[APP.COLS.PURCHASES.CURRENCY] ? purchMap[APP.COLS.PURCHASES.CURRENCY] - 1 : null;
+
+      const parseNum_ = function (v) {
+        if (typeof v === 'number') return v;
+        const s = String(v || '').replace(/[^0-9.\-]/g, '');
+        return s ? Number(s) : 0;
+      };
 
       purchData.forEach(function (r) {
         if (idxOrder == null || idxSku == null) return;
+
         const orderId = r[idxOrder];
-        const sku     = (r[idxSku] || '').toString().trim();
+        const sku = (r[idxSku] || '').toString().trim();
         if (!orderId || !sku) return;
 
         const baseKey = String(orderId) + '||' + String(sku);
-        const unitCost = idxUnitLanded != null
+        const keyOrdSku = 'ORDSKU||' + baseKey;
+
+        const cur = (idxCurrency != null) ? (r[idxCurrency] || '').toString().trim() : '';
+        if (cur) currencyMap[keyOrdSku] = cur;
+
+        let unitPriceOrig = 0;
+        if (idxTotalOrig != null && idxQty != null) {
+          const tot = parseNum_(r[idxTotalOrig]);
+          const q = parseNum_(r[idxQty]);
+          if (q > 0) unitPriceOrig = tot / q;
+        }
+        if (unitPriceOrig > 0) priceMap[keyOrdSku] = unitPriceOrig;
+
+        // Prefer Unit Landed Cost, fallback to Net Unit Price (EGP)
+        const unitCost = (idxUnitLanded != null)
           ? Number(r[idxUnitLanded] || 0)
           : (idxUnitNet != null ? Number(r[idxUnitNet] || 0) : 0);
 
-        if (unitCost) {
-          costMap['ORDSKU||' + baseKey] = unitCost;
-        }
+        if (unitCost > 0) costMap[keyOrdSku] = unitCost;
 
+        // Batch mappings (optional but helpful)
         if (idxBatch != null) {
           const batch = (r[idxBatch] || '').toString().trim();
-          if (batch && unitCost) {
-            costMap['BATCH||' + batch] = unitCost;
+          if (batch) {
+            const keyBatch = 'BATCH||' + batch;
+            if (unitCost > 0) costMap[keyBatch] = unitCost;
+            if (cur) currencyMap[keyBatch] = cur;
+            if (unitPriceOrig > 0) priceMap[keyBatch] = unitPriceOrig;
           }
         }
       });
+
     }
 
     // ===== Determine already-synced QC rows (new: by QC ID, legacy: by notes row number) =====
@@ -1854,8 +2044,8 @@ function syncQCtoInventory_UAE() {
       const ledgerData = ledgerSh.getRange(2, 1, ledgerLast - 1, ledgerSh.getLastColumn()).getValues();
 
       const idxSrcType = ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] ? ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] - 1 : null;
-      const idxSrcId   = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID]   ? ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID]   - 1 : null;
-      const idxNotes   = ledgerMap[APP.COLS.INV_TXNS.NOTES]       ? ledgerMap[APP.COLS.INV_TXNS.NOTES]       - 1 : null;
+      const idxSrcId = ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] ? ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] - 1 : null;
+      const idxNotes = ledgerMap[APP.COLS.INV_TXNS.NOTES] ? ledgerMap[APP.COLS.INV_TXNS.NOTES] - 1 : null;
 
       ledgerData.forEach(function (row) {
         const srcType = idxSrcType != null ? row[idxSrcType] : '';
@@ -1888,7 +2078,7 @@ function syncQCtoInventory_UAE() {
       const sheetRow = idx + 2;
 
       const orderId = row[qcMap[APP.COLS.QC_UAE.ORDER_ID] - 1];
-      const sku     = (row[qcMap[APP.COLS.QC_UAE.SKU] - 1] || '').toString().trim();
+      const sku = (row[qcMap[APP.COLS.QC_UAE.SKU] - 1] || '').toString().trim();
       if (!orderId || !sku) return;
 
       let qcId = qcIdCol ? String(row[qcIdCol - 1] || '').trim() : '';
@@ -1903,27 +2093,36 @@ function syncQCtoInventory_UAE() {
       let batchCode = (batchCodeRaw || '').toString().trim();
       if (!batchCode) batchCode = String(orderId) + '||' + String(sku);
 
-      const product   = row[qcMap['Product Name'] - 1] || '';
-      const variant   = row[qcMap['Variant / Color'] - 1] || '';
-      const warehouse = (row[qcMap['Warehouse (UAE)'] - 1] || 'UAE-DXB').toString().trim();
+      const product = row[qcMap['Product Name'] - 1] || '';
+      const variant = row[qcMap['Variant / Color'] - 1] || '';
+      const warehouseRaw = (row[qcMap[APP.COLS.QC_UAE.WAREHOUSE] - 1] || '').toString().trim();
+      const warehouse = (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(warehouseRaw) : warehouseRaw;
+      if (!warehouse) {
+        logError_('syncQCtoInventory_UAE', new Error('Missing Warehouse (UAE) in QC_UAE'), { qcId: qcId, qcRow: (2 + idx) });
+        return; // skip this QC row
+      }
 
       // Qty In logic:
       //  - If Qty OK exists → use it
       //  - Else fallback Qty Received - Qty Defective
       let qtyIn = 0;
-      const qtyOkCol  = qcMap['Qty OK'];
-      const qtyRecCol = qcMap['Qty Received'];
-      const qtyDefCol = qcMap['Qty Defective'];
 
-      if (qtyOkCol) {
-        qtyIn = Number(row[qtyOkCol - 1] || 0);
+      const qtyOkCol = qcMap[APP.COLS.QC_UAE.QTY_OK] || qcMap['Qty OK'];
+      const qtyRecCol = qcMap[APP.COLS.QC_UAE.QTY_RECEIVED] || qcMap['Qty Received'];
+      const qtyDefCol = qcMap[APP.COLS.QC_UAE.QTY_DEFECT] || qcMap['Qty Defective'];
+
+      const qtyOkVal = qtyOkCol ? Number(row[qtyOkCol - 1] || 0) : 0;
+
+
+      if (qtyOkVal > 0) {
+        qtyIn = qtyOkVal;
       } else if (qtyRecCol) {
         const rec = Number(row[qtyRecCol - 1] || 0);
         const def = qtyDefCol ? Number(row[qtyDefCol - 1] || 0) : 0;
         qtyIn = Math.max(0, rec - def);
       }
 
-      if (!qtyIn) return;
+      if (qtyIn <= 0) return; // skip this QC row
 
       const qcDate = qcDateCol ? row[qcDateCol - 1] : null;
 
@@ -1937,6 +2136,9 @@ function syncQCtoInventory_UAE() {
         unitCostEgp = costMap['ORDSKU||' + baseKey] || 0;
       }
 
+      const currency = currencyMap['BATCH||' + batchCode] || currencyMap['ORDSKU||' + baseKey] || '';
+      const unitPriceOrig = priceMap['BATCH||' + batchCode] || priceMap['ORDSKU||' + baseKey] || 0;
+
       txns.push({
         type: 'IN',
         sourceType: 'QC_UAE',
@@ -1948,7 +2150,8 @@ function syncQCtoInventory_UAE() {
         warehouse: warehouse,
         qty: qtyIn,
         unitCostEgp: unitCostEgp,
-        currency: 'EGP',
+        currency: currency,            // <-- FIX
+        unitPriceOrig: unitPriceOrig,  // <-- FIX
         txnDate: qcDate || new Date(),
         notes: 'Imported from QC_UAE (QC ID: ' + qcId + ', row ' + sheetRow + ', Order ' + orderId + ')'
       });
@@ -1964,15 +2167,15 @@ function syncQCtoInventory_UAE() {
       }
     }
 
-    inv_rebuildAllSnapshots();
-    if (typeof safeAlert_ === 'function') {
+    if (newTxns > 0 && typeof inv_rebuildAllSnapshots === 'function') inv_rebuildAllSnapshots();
+    if (interactive && typeof safeAlert_ === 'function') {
       safeAlert_('QC_UAE Sync Done.\n\nNew txns: ' + newTxns + '\nSkipped (already synced): ' + skipped);
     } else {
       Logger.log('QC_UAE Sync Done. New txns=' + newTxns + ', skipped=' + skipped);
     }
- catch (e) {
-    logError_('syncQCtoInventory_UAE', e);
-    throw e;
+  } catch (err) {
+    logError_('syncQCtoInventory_UAE', err);
+    throw err;
   }
 }
 
@@ -1995,100 +2198,120 @@ function syncQCtoInventory_UAE() {
 function syncShipmentsUaeEgToInventory() {
   try {
     const runner_ = function () {
-      const shipSh   = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+      const shipSh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
       const invUaeSh = getSheet_(APP.SHEETS.INVENTORY_UAE);
       const ledgerSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
 
-      const shipMap   = getHeaderMap_(shipSh);
+      // Repair known blank header (Status → Warehouse (UAE)) in-place and ensure persistent Line ID column exists.
+      try {
+        if (typeof SHIP_UAE_EG_HEADERS !== 'undefined') {
+          repairBlankHeadersByPosition_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, 1);
+          ensureSheetSchema_(APP.SHEETS.SHIP_UAE_EG, SHIP_UAE_EG_HEADERS, { addMissing: true });
+        }
+      } catch (e) {
+        logError_('syncShipmentsUaeEgToInventory.preflight', e);
+      }
+
+      const shipMap = getHeaderMap_(shipSh);
       const invUaeMap = getHeaderMap_(invUaeSh);
+      const ledgerMap = getHeaderMap_(ledgerSh);
 
       const lastShipRow = shipSh.getLastRow();
       if (lastShipRow < 2) {
-        SpreadsheetApp.getUi().alert('No rows in Shipments_UAE_EG to sync.');
+        Logger.log('[SHIP_UAE_EG] No rows to sync.');
         return;
       }
 
       const shipData = shipSh.getRange(2, 1, lastShipRow - 1, shipSh.getLastColumn()).getValues();
 
-      // Required columns
+      // ===== Required Shipments_UAE_EG columns =====
       const colShipmentId = shipMap[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID] || shipMap['Shipment ID'];
-      const colSku        = shipMap[APP.COLS.SHIP_UAE_EG.SKU]         || shipMap['SKU'];
-      const colQty        = shipMap[APP.COLS.SHIP_UAE_EG.QTY]         || shipMap['Qty'];
-      const colShipDate   = shipMap[APP.COLS.SHIP_UAE_EG.SHIP_DATE]   || shipMap['Ship Date'] || shipMap['Ship Date (UAE)'];
-      const colArrival    = shipMap[APP.COLS.SHIP_UAE_EG.ARRIVAL]     || shipMap['Actual Arrival'] || shipMap['Actual Arrival (EG)'];
-      const colQtySynced  = shipMap[APP.COLS.SHIP_UAE_EG.QTY_SYNCED]  || shipMap['Qty Synced'];
+      const colSku = shipMap[APP.COLS.SHIP_UAE_EG.SKU] || shipMap['SKU'];
+      const colQty = shipMap[APP.COLS.SHIP_UAE_EG.QTY] || shipMap['Qty'];
+      const colShipDate = shipMap[APP.COLS.SHIP_UAE_EG.SHIP_DATE] || shipMap['Ship Date'] || shipMap['Ship Date (UAE)'];
+      const colArrival = shipMap[APP.COLS.SHIP_UAE_EG.ARRIVAL] || shipMap['Actual Arrival'] || shipMap['Actual Arrival (EG)'];
+      const colQtySynced = shipMap[APP.COLS.SHIP_UAE_EG.QTY_SYNCED] || shipMap['Qty Synced'];
 
-      if (!colShipmentId || !colSku || !colQty || !colShipDate || !colQtySynced) {
-        SpreadsheetApp.getUi().alert('Missing required headers in Shipments_UAE_EG (Shipment ID / SKU / Qty / Ship Date / Qty Synced).');
+      if (!colShipmentId || !colSku || !colQty || !colShipDate || !colQtySynced || !colArrival) {
+        logError_(
+          'syncShipmentsUaeEgToInventory',
+          new Error('Missing required headers in Shipments_UAE_EG (Shipment ID / SKU / Qty / Ship Date / Actual Arrival / Qty Synced).')
+        );
         return;
       }
 
       const idxShipShipmentId = colShipmentId - 1;
-      const idxShipSku        = colSku        - 1;
-      const idxShipQty        = colQty        - 1;
-      const idxShipShipDate   = colShipDate   - 1;
-      const idxShipArrival    = colArrival    ? colArrival    - 1 : null;
-      const idxShipQtySynced  = colQtySynced  - 1;
+      const idxShipSku = colSku - 1;
+      const idxShipQty = colQty - 1;
+      const idxShipShipDate = colShipDate - 1;
+      const idxShipArrival = colArrival - 1;
+      const idxShipQtySynced = colQtySynced - 1;
 
-      // Cost columns
+      // ===== Cost columns (per agreed policy) =====
       const colShipCost =
         shipMap[APP.COLS.SHIP_UAE_EG.SHIP_COST] ||
         shipMap['Ship Cost (EGP) – per unit or box'] ||
         shipMap['Ship Cost (EGP) - per unit or box'] ||
         shipMap['Ship Cost (EGP)'];
-      const colCustoms =
-        shipMap[APP.COLS.SHIP_UAE_EG.CUSTOMS] ||
-        shipMap['Customs (EGP)'];
-      const colOther =
-        shipMap[APP.COLS.SHIP_UAE_EG.OTHER] ||
-        shipMap['Other (EGP)'];
-      const colTotal =
-        shipMap[APP.COLS.SHIP_UAE_EG.TOTAL_COST] ||
-        shipMap['Total Cost (EGP)'];
+
+      const colCustoms = shipMap[APP.COLS.SHIP_UAE_EG.CUSTOMS] || shipMap['Customs (EGP)'];
+      const colOther = shipMap[APP.COLS.SHIP_UAE_EG.OTHER] || shipMap['Other (EGP)'];
+      const colTotal = shipMap[APP.COLS.SHIP_UAE_EG.TOTAL_COST] || shipMap['Total Cost (EGP)'];
 
       const idxShipShipCost = colShipCost ? colShipCost - 1 : null;
-      const idxShipCustoms  = colCustoms  ? colCustoms  - 1 : null;
-      const idxShipOther    = colOther    ? colOther    - 1 : null;
-      const idxShipTotal    = colTotal    ? colTotal    - 1 : null;
+      const idxShipCustoms = colCustoms ? colCustoms - 1 : null;
+      const idxShipOther = colOther ? colOther - 1 : null;
+      const idxShipTotal = colTotal ? colTotal - 1 : null;
 
-      // Optional columns: Product / Variant / Courier / Warehouse (UAE)
-      const idxShipProdName = shipMap['Product Name']    ? shipMap['Product Name']    - 1 : null;
-      const idxShipVariant  = shipMap['Variant / Color'] ? shipMap['Variant / Color'] - 1 : null;
-      const colCourier      = shipMap['Courier'] || shipMap['Courier Name'];
-      const idxShipCourier  = colCourier ? colCourier - 1 : null;
-      const colShipWhUae    = shipMap['Warehouse (UAE)'];
-      const idxShipWhUae    = colShipWhUae ? colShipWhUae - 1 : null;
+      // ===== Optional columns =====
+      const idxShipProdName = shipMap['Product Name'] ? shipMap['Product Name'] - 1 : null;
+      const idxShipVariant = shipMap['Variant / Color'] ? shipMap['Variant / Color'] - 1 : null;
 
-      // ===== Inventory_UAE map: SKU+Warehouse → cost info =====
+      const colBoxId = shipMap[APP.COLS.SHIP_UAE_EG.BOX_ID] || shipMap['Box ID'];
+      const idxShipBoxId = colBoxId ? colBoxId - 1 : null;
+
+      const colLineId = shipMap[APP.COLS.SHIP_UAE_EG.LINE_ID] || shipMap['Line ID'];
+      const idxShipLineId = colLineId ? colLineId - 1 : null;
+
+      const colCourier = shipMap['Courier'] || shipMap['Courier Name'];
+      const idxShipCourier = colCourier ? colCourier - 1 : null;
+
+      const colShipWhUae = shipMap[APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE] || shipMap['Warehouse (UAE)'];
+      const idxShipWhUae = colShipWhUae ? colShipWhUae - 1 : null;
+
+      // ===== Inventory_UAE snapshot map for product/variant/last source id (NOT for avg-cost; we derive cost from ledger) =====
       const uaeLastRow = invUaeSh.getLastRow();
       const uaeData = (uaeLastRow >= 2)
         ? invUaeSh.getRange(2, 1, uaeLastRow - 1, invUaeSh.getLastColumn()).getValues()
         : [];
 
-      const idxUaeSku       = invUaeMap['SKU']             ? invUaeMap['SKU']             - 1 : null;
-      const idxUaeProd      = invUaeMap['Product Name']    ? invUaeMap['Product Name']    - 1 : null;
-      const idxUaeVariant   = invUaeMap['Variant / Color'] ? invUaeMap['Variant / Color'] - 1 : null;
-      const idxUaeAvgCost   = invUaeMap['Avg Cost (EGP)']  ? invUaeMap['Avg Cost (EGP)']  - 1 : null;
-      const idxUaeLastSrcId = invUaeMap['Last Source ID']  ? invUaeMap['Last Source ID']  - 1 : null;
-      const idxUaeWh        = invUaeMap['Warehouse (UAE)'] ? invUaeMap['Warehouse (UAE)'] - 1 : null;
+      const idxUaeSku = invUaeMap['SKU'] ? invUaeMap['SKU'] - 1 : null;
+      const idxUaeProd = invUaeMap['Product Name'] ? invUaeMap['Product Name'] - 1 : null;
+      const idxUaeVariant = invUaeMap['Variant / Color'] ? invUaeMap['Variant / Color'] - 1 : null;
+      const idxUaeLastSrcId = invUaeMap['Last Source ID'] ? invUaeMap['Last Source ID'] - 1 : null;
+      const idxUaeWh = invUaeMap['Warehouse (UAE)'] ? invUaeMap['Warehouse (UAE)'] - 1 : null;
 
       /** SKU+Warehouse → info */
       const uaeByWh = {};
       /** SKU → default info (first warehouse found for SKU) */
       const uaeBySku = {};
 
+      function normWh_(w) {
+        const t = String(w || '').trim();
+        return (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(t) : t;
+      }
+
       uaeData.forEach(function (r) {
         if (idxUaeSku == null) return;
         const skuVal = r[idxUaeSku];
         if (!skuVal) return;
 
-        const wh  = idxUaeWh != null ? (r[idxUaeWh] || '').toString().trim() : '';
-        const key = skuVal + '||' + wh;
+        const wh = (idxUaeWh != null) ? normWh_(r[idxUaeWh]) : '';
+        const key = String(skuVal) + '||' + String(wh);
 
         const info = {
           product: idxUaeProd != null ? (r[idxUaeProd] || '') : '',
           variant: idxUaeVariant != null ? (r[idxUaeVariant] || '') : '',
-          avgCost: idxUaeAvgCost != null ? Number(r[idxUaeAvgCost] || 0) : 0,
           lastSourceId: idxUaeLastSrcId != null ? (r[idxUaeLastSrcId] || '') : '',
           warehouse: wh
         };
@@ -2097,80 +2320,227 @@ function syncShipmentsUaeEgToInventory() {
         if (!uaeBySku[skuVal]) uaeBySku[skuVal] = info;
       });
 
+      // ===== Build ledger-derived UAE basis (qty/value/avg) + extras baseline (freeze across partial deltas) =====
+      const TOL = 0.05;
+
+      const uaeBasis = _sueg_buildUaeBasisFromLedger_(ledgerSh, ledgerMap);
+      const baselineExtraPUByLineKey = _sueg_buildUaeEgExtrasBaselineFromLedger_(ledgerSh, ledgerMap, TOL);
+
+      // ===== Build dedupe sets for SHIP_UAE_EG to prevent duplicates on retries/crashes and across code revisions =====
+      const idxLTxnId = (ledgerMap[APP.COLS.INV_TXNS.TXN_ID] || ledgerMap['Txn ID'] || 0) - 1;
+      const idxLSourceType = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type'] || 0) - 1;
+      const idxLSourceId = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID'] || 0) - 1;
+
+      const existingSourceIds = new Set();
+      const existingTxnIds = new Set();
+      const lr = ledgerSh.getLastRow();
+
+      if (lr >= 2 && idxLSourceType >= 0) {
+        const lvals = ledgerSh.getRange(2, 1, lr - 1, ledgerSh.getLastColumn()).getValues();
+        for (const r of lvals) {
+          const st = String(r[idxLSourceType] || '').trim();
+          if (st !== 'SHIP_UAE_EG') continue;
+
+          if (idxLSourceId >= 0) {
+            const sid = String(r[idxLSourceId] || '').trim();
+            if (sid) existingSourceIds.add(sid);
+          }
+          if (idxLTxnId >= 0) {
+            const tid = String(r[idxLTxnId] || '').trim();
+            if (tid) existingTxnIds.add(tid);
+          }
+        }
+      }
+
+      // ===== Main loop =====
       let outCount = 0;
-      let inCount  = 0;
+      let inCount = 0;
+      let lineIdsChanged = false;
 
       const txns = [];
 
-      // Process shipments rows
+      function toValidDate_(v) {
+        if (!v) return null;
+        if (v instanceof Date && !isNaN(v.getTime())) return v;
+        const d = new Date(v);
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+        return null;
+      }
+
       shipData.forEach(function (row, idx) {
         const shipmentId = row[idxShipShipmentId];
-        const sku        = row[idxShipSku];
-        const qtyCurrent = Number(row[idxShipQty] || 0);
+        const sku = row[idxShipSku];
+        const qtyOriginal = Number(row[idxShipQty] || 0);
 
-        if (!shipmentId || !sku || !qtyCurrent) return;
+        if (!shipmentId || !sku || !qtyOriginal) return;
 
         const qtySynced = Number(row[idxShipQtySynced] || 0);
-        const delta     = qtyCurrent - qtySynced;
+        const delta = qtyOriginal - qtySynced;
 
         if (delta === 0) return;
         if (delta < 0) {
           logError_(
             'syncShipmentsUaeEgToInventory',
             new Error('Negative delta for shipment row (Qty < Qty Synced).'),
-            { shipmentId: shipmentId, sku: sku, qtyCurrent: qtyCurrent, qtySynced: qtySynced }
+            { shipmentId: shipmentId, sku: sku, qtyOriginal: qtyOriginal, qtySynced: qtySynced }
           );
           return;
         }
 
-        const shipDate  = row[idxShipShipDate] || new Date();
-        const arrDate   = (idxShipArrival != null) ? (row[idxShipArrival] || null) : null;
-        const inTxnDate = arrDate || shipDate;
+        const sheetRow = idx + 2; // actual row number in sheet
 
-        // Total extras (ship/customs/other) per unit (for landed cost)
-        const shipCost = idxShipShipCost != null ? Number(row[idxShipShipCost] || 0) : 0;
-        const customs  = idxShipCustoms  != null ? Number(row[idxShipCustoms]  || 0) : 0;
-        const other    = idxShipOther    != null ? Number(row[idxShipOther]    || 0) : 0;
-        const totalExtras = (idxShipTotal != null)
-          ? Number(row[idxShipTotal] || (shipCost + customs + other))
-          : (shipCost + customs + other);
+        // Deterministic dates (no new Date() fallback in txn-id path)
+        const shipDate = toValidDate_(row[idxShipShipDate]);
+        const arrDate = toValidDate_(row[idxShipArrival]);
+        if (!shipDate || !arrDate) {
+          logError_(
+            'syncShipmentsUaeEgToInventory',
+            new Error('Missing Ship Date and/or Actual Arrival (EG). Row skipped (deterministic dates required).'),
+            { shipmentId: shipmentId, sku: sku, row: sheetRow, shipDate: row[idxShipShipDate], arrival: row[idxShipArrival] }
+          );
+          return;
+        }
 
-        // === Determine UAE warehouse for OUT ===
+        // Line discriminator: SKU can repeat within the same Shipment ID (across boxes/rows)
+        const boxId = (idxShipBoxId != null) ? String(row[idxShipBoxId] || '').trim() : '';
+        const vKey = (idxShipVariant != null) ? String(row[idxShipVariant] || '').trim() : '';
+
+        // Policy: Box ID first; if Box ID is empty use a persistent per-row Line ID (never sheet row number, since sorting/filtering occurs).
+        let lineId = '';
+        if (!boxId) {
+          if (idxShipLineId == null) {
+            logError_(
+              'syncShipmentsUaeEgToInventory',
+              new Error('Missing Line ID column in Shipments_UAE_EG (required when Box ID is empty).'),
+              { shipmentId: shipmentId, sku: sku, row: sheetRow }
+            );
+            return;
+          }
+          lineId = String(row[idxShipLineId] || '').trim();
+          if (!lineId) {
+            lineId = 'L-' + Utilities.getUuid();
+            row[idxShipLineId] = lineId;
+            lineIdsChanged = true;
+          }
+        }
+        // NOTE: Keep legacy discriminator format for backward compatibility (existing ledger keys).
+        const lineDiscriminator = boxId ? ('B' + boxId) : ('L' + lineId);
+
+        const stableLineKey = `SUEG|${shipmentId}|${lineDiscriminator}|${sku}|${vKey}`;
+
+        // Operation key encodes the pre-sync Qty Synced and the delta, so retries don't duplicate.
+        const baseKey = `${stableLineKey}|S${qtySynced}|D${delta}`;
+        const sourceIdOut = `${baseKey}|OUT`;
+        const sourceIdIn = `${baseKey}|IN`;
+
+        let outExists = existingSourceIds.has(sourceIdOut);
+        let inExists = existingSourceIds.has(sourceIdIn);
+
+        // ===== Determine UAE warehouse for OUT =====
         let fromWarehouse = '';
-        const whCell = (idxShipWhUae != null) ? (row[idxShipWhUae] || '').toString().trim() : '';
+        const whCell = (idxShipWhUae != null) ? normWh_(row[idxShipWhUae]) : '';
 
         // 1) If sheet has Warehouse (UAE), use it
         if (whCell) fromWarehouse = whCell;
 
         // 2) Else infer from courier label (Kor / Attia) if present
-        let courierLabel = (idxShipCourier != null) ? (row[idxShipCourier] || '').toString().trim() : '';
+        let courierLabel = (idxShipCourier != null) ? String(row[idxShipCourier] || '').trim() : '';
         if (!fromWarehouse && courierLabel) {
           const c = courierLabel.toUpperCase();
-          if (c.indexOf('KOR') >= 0) fromWarehouse = 'UAE-KOR';
-          if (c.indexOf('ATTIA') >= 0) fromWarehouse = 'UAE-ATTIA';
+          if (c.indexOf('KOR') >= 0) fromWarehouse = 'KOR';
+          if (c.indexOf('ATTIA') >= 0) fromWarehouse = 'ATTIA';
         }
 
-        // 3) Else infer from inventory (first warehouse for SKU)
+        // 3) Else infer from inventory snapshot (first warehouse for SKU)
         if (!fromWarehouse) {
           const invGuess = uaeBySku[sku] || {};
-          if (invGuess.warehouse) fromWarehouse = invGuess.warehouse;
+          if (invGuess.warehouse) fromWarehouse = normWh_(invGuess.warehouse);
         }
 
-        if (!fromWarehouse) fromWarehouse = 'UAE-DXB';
+        if (!fromWarehouse) {
+          logError_(
+            'syncShipmentsUaeEgToInventory',
+            new Error('Cannot determine UAE warehouse for OUT'),
+            { shipmentId: shipmentId, sku: sku, row: sheetRow }
+          );
+          return;
+        }
 
-        // ===== Inventory info for this SKU+Warehouse =====
-        const keyWh  = sku + '||' + fromWarehouse;
-        let info     = uaeByWh[keyWh] || uaeBySku[sku] || {};
-
-        // If Warehouse (UAE) is empty in sheet and inventory has a warehouse → fill it
+        // If Warehouse (UAE) is empty in sheet and inventory has a warehouse → fill it (user convenience).
+        const keyWhInfo = String(sku) + '||' + String(fromWarehouse);
+        const info = uaeByWh[keyWhInfo] || uaeBySku[sku] || {};
         if (idxShipWhUae != null && !whCell && info.warehouse) {
           row[idxShipWhUae] = info.warehouse;
-          fromWarehouse = info.warehouse;
         }
 
-        const baseCost      = info.avgCost || 0; // UAE avg cost
-        const extrasPerUnit = qtyCurrent > 0 ? totalExtras / qtyCurrent : 0;
-        const landedCost    = baseCost + extrasPerUnit;
+        // Auto-fill Courier label if missing and warehouse indicates an office
+        if (idxShipCourier != null && !courierLabel && fromWarehouse) {
+          const whUpper = String(fromWarehouse).toUpperCase();
+          if (whUpper === 'ATTIA') row[idxShipCourier] = 'Attia';
+          if (whUpper === 'KOR') row[idxShipCourier] = 'Kor';
+          courierLabel = String(row[idxShipCourier] || '').trim();
+        }
+
+        // ===== Derive base cost from ledger (moving-average basis) =====
+        const basisKey = String(sku) + '||' + String(fromWarehouse);
+        const basis = uaeBasis[basisKey];
+
+        if (!basis || basis.qty <= 0) {
+          logError_(
+            'syncShipmentsUaeEgToInventory',
+            new Error('No UAE on-hand basis found in ledger for SKU+Warehouse (cannot price OUT deterministically).'),
+            { shipmentId: shipmentId, sku: sku, fromWarehouse: fromWarehouse, row: sheetRow }
+          );
+          return;
+        }
+
+        if (basis.qty < delta) {
+          logError_(
+            'syncShipmentsUaeEgToInventory',
+            new Error('Insufficient UAE on-hand quantity for requested delta. Row skipped.'),
+            { shipmentId: shipmentId, sku: sku, fromWarehouse: fromWarehouse, delta: delta, onHand: basis.qty, row: sheetRow }
+          );
+          return;
+        }
+
+        const baseCost = Number(basis.avgCost || 0);
+
+        // ===== Extras policy (per-unit ship + allocated totals) + freeze across partial deltas =====
+        const shipCostPerUnit = (idxShipShipCost != null) ? Number(row[idxShipShipCost] || 0) : 0;
+        const customsTotal = (idxShipCustoms != null) ? Number(row[idxShipCustoms] || 0) : 0;
+        const otherTotal = (idxShipOther != null) ? Number(row[idxShipOther] || 0) : 0;
+
+        // Enforce sheet Total Cost = Qty * shipCostPerUnit + customsTotal + otherTotal (if column exists)
+        if (idxShipTotal != null) {
+          row[idxShipTotal] = (qtyOriginal * shipCostPerUnit) + customsTotal + otherTotal;
+        }
+
+        let extrasPerUnit = shipCostPerUnit + ((customsTotal + otherTotal) / qtyOriginal);
+
+        const baseline = baselineExtraPUByLineKey[stableLineKey];
+        if (baseline != null && !isNaN(Number(baseline))) {
+          const b = Number(baseline);
+          if (Math.abs(extrasPerUnit - b) > TOL) {
+            logError_(
+              'syncShipmentsUaeEgToInventory.extrasBaselineMismatch',
+              new Error('Extras-per-unit mismatch vs ledger baseline; using baseline to keep deltas consistent.'),
+              {
+                stableLineKey: stableLineKey,
+                shipmentId: shipmentId,
+                sku: sku,
+                fromSheet: extrasPerUnit,
+                baseline: b,
+                qtyOriginal: qtyOriginal,
+                shipCostPerUnit: shipCostPerUnit,
+                customsTotal: customsTotal,
+                otherTotal: otherTotal
+              }
+            );
+          }
+          extrasPerUnit = b;
+        }
+
+        const landedCost = baseCost + extrasPerUnit;
 
         // Fill Product / Variant if missing
         if (idxShipProdName != null && !row[idxShipProdName] && info.product) {
@@ -2180,61 +2550,159 @@ function syncShipmentsUaeEgToInventory() {
           row[idxShipVariant] = info.variant;
         }
 
-        // Auto-fill Courier label if missing and warehouse indicates an office
-        if (idxShipCourier != null && !courierLabel && fromWarehouse) {
-          const whUpper = fromWarehouse.toUpperCase();
-          if (whUpper === 'UAE-ATTIA') {
-            row[idxShipCourier] = 'Attia';
-          } else if (whUpper === 'UAE-KOR') {
-            row[idxShipCourier] = 'Kor';
-          }
-          courierLabel = row[idxShipCourier];
-        }
-
         // Batch Code: prefer inventory last source id
         const batchCode = info.lastSourceId
           ? String(info.lastSourceId) + '||' + String(sku)
           : String(shipmentId) + '||' + String(sku);
 
+        const productName =
+          (info && (info.productName || info.product)) ||
+          (idxShipProdName != null ? row[idxShipProdName] : '') ||
+          '';
+
+        const variant =
+          (info && info.variant) ||
+          (idxShipVariant != null ? row[idxShipVariant] : '') ||
+          '';
+
+        const toWarehouseRaw = (APP.WAREHOUSES && APP.WAREHOUSES.TAN_GH) ? APP.WAREHOUSES.TAN_GH : 'TAN-GH';
+        const toWarehouse = normWh_(toWarehouseRaw);
+
+        // Txn-ID based dedupe (covers legacy Source ID scheme and prevents duplicates across code revisions)
+        const outTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
+          type: 'OUT',
+          sourceType: 'SHIP_UAE_EG',
+          sourceId: sourceIdOut,
+          batchCode: batchCode,
+          sku: String(sku),
+          warehouse: fromWarehouse,
+          qtyIn: 0,
+          qtyOut: delta,
+          unitCostEgp: baseCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: shipDate
+        }) : '';
+
+        const inTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
+          type: 'IN',
+          sourceType: 'SHIP_UAE_EG',
+          sourceId: sourceIdIn,
+          batchCode: batchCode,
+          sku: String(sku),
+          warehouse: toWarehouse,
+          qtyIn: delta,
+          qtyOut: 0,
+          unitCostEgp: landedCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: arrDate
+        }) : '';
+
+        const outLegacyTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
+          type: 'OUT',
+          sourceType: 'SHIP_UAE_EG',
+          sourceId: String(shipmentId),
+          batchCode: batchCode,
+          sku: String(sku),
+          warehouse: fromWarehouse,
+          qtyIn: 0,
+          qtyOut: delta,
+          unitCostEgp: baseCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: shipDate
+        }) : '';
+
+        const inLegacyTxnId = (typeof _inv_makeTxnId_ === 'function') ? _inv_makeTxnId_({
+          type: 'IN',
+          sourceType: 'SHIP_UAE_EG',
+          sourceId: String(shipmentId),
+          batchCode: batchCode,
+          sku: String(sku),
+          warehouse: toWarehouse,
+          qtyIn: delta,
+          qtyOut: 0,
+          unitCostEgp: landedCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: arrDate
+        }) : '';
+
+        if (!outExists && ((outTxnId && existingTxnIds.has(outTxnId)) || (outLegacyTxnId && existingTxnIds.has(outLegacyTxnId)))) {
+          outExists = true;
+        }
+        if (!inExists && ((inTxnId && existingTxnIds.has(inTxnId)) || (inLegacyTxnId && existingTxnIds.has(inLegacyTxnId)))) {
+          inExists = true;
+        }
+
         // ===== OUT from UAE warehouse =====
-        txns.push({
-          type        : 'OUT',
-          sourceType  : 'SHIP_UAE_EG',
-          sourceId    : String(shipmentId),
-          batchCode   : batchCode,
-          sku         : String(sku),
-          productName : info.product || (idxShipProdName != null ? row[idxShipProdName] : '') || '',
-          variant     : info.variant || (idxShipVariant != null ? row[idxShipVariant] : '') || '',
-          warehouse   : fromWarehouse,
-          qty         : delta,
-          unitCostEgp : baseCost,
-          currency    : 'EGP',
-          txnDate     : shipDate,
-          notes       : 'UAE→EG OUT (' + fromWarehouse + '), delta=' + delta
-        });
-        outCount++;
+        if (!outExists) {
+          txns.push({
+            txnId: outTxnId || undefined,
+            type: 'OUT',
+            sourceType: 'SHIP_UAE_EG',
+            sourceId: sourceIdOut,
+            batchCode: batchCode,
+            sku: String(sku),
+            productName: String(productName || ''),
+            variant: String(variant || ''),
+            warehouse: fromWarehouse,
+            qty: delta,
+            unitCostEgp: baseCost,
+            currency: 'EGP',
+            txnDate: shipDate,
+            notes: 'UAE→EG OUT (' + fromWarehouse + '), delta=' + delta
+          });
 
-        // ===== IN to TAN-GH at landed cost =====
-        txns.push({
-          type        : 'IN',
-          sourceType  : 'SHIP_UAE_EG',
-          sourceId    : String(shipmentId),
-          batchCode   : batchCode,
-          sku         : String(sku),
-          productName : info.product || (idxShipProdName != null ? row[idxShipProdName] : '') || '',
-          variant     : info.variant || (idxShipVariant != null ? row[idxShipVariant] : '') || '',
-          warehouse   : (APP.WAREHOUSES && APP.WAREHOUSES.TAN_GH) ? APP.WAREHOUSES.TAN_GH : 'TAN-GH',
-          qty         : delta,
-          unitCostEgp : landedCost,
-          currency    : 'EGP',
-          txnDate     : inTxnDate,
-          notes       : 'UAE→EG IN (TAN-GH), delta=' + delta + ', landedCost=' + landedCost.toFixed(2)
-        });
-        inCount++;
+          outCount++;
+          existingSourceIds.add(sourceIdOut);
+          if (outTxnId) existingTxnIds.add(outTxnId);
+        }
 
-        // Update Qty Synced
-        row[idxShipQtySynced] = qtyCurrent;
+        // ===== IN to EG at landed cost =====
+        if (!inExists) {
+          txns.push({
+            txnId: inTxnId || undefined,
+            type: 'IN',
+            sourceType: 'SHIP_UAE_EG',
+            sourceId: sourceIdIn,
+            batchCode: batchCode,
+            sku: String(sku),
+            productName: String(productName || ''),
+            variant: String(variant || ''),
+            warehouse: toWarehouse,
+            qty: delta,
+            unitCostEgp: landedCost,
+            currency: 'EGP',
+            txnDate: arrDate,
+            notes: 'UAE→EG IN (' + toWarehouse + '), delta=' + delta + ', landedCost=' + landedCost.toFixed(2)
+          });
+
+          inCount++;
+          existingSourceIds.add(sourceIdIn);
+          if (inTxnId) existingTxnIds.add(inTxnId);
+        }
+
+        // Crash-safe in-run basis decrement (moving-average: remove value at avg cost)
+        basis.qty -= delta;
+        basis.value -= (baseCost * delta);
+        if (basis.qty <= 0 || basis.value <= 0) {
+          basis.qty = 0;
+          basis.value = 0;
+          basis.avgCost = 0;
+        }
+
+        // Update Qty Synced (safe even if txns already existed)
+        row[idxShipQtySynced] = qtyOriginal;
       });
+
+      // Persist any newly generated Line IDs BEFORE writing ledger rows (crash-safety for idempotency).
+      if (lineIdsChanged && colLineId && idxShipLineId != null) {
+        shipSh.getRange(2, colLineId, shipData.length, 1).setValues(shipData.map(function (r) {
+          return [r[idxShipLineId] || ''];
+        }));
+      }
 
       // Write txns in one batch (faster + one lock)
       if (txns.length) {
@@ -2248,8 +2716,9 @@ function syncShipmentsUaeEgToInventory() {
       // Write sheet updates (Qty Synced + optional autofills)
       shipSh.getRange(2, 1, shipData.length, shipSh.getLastColumn()).setValues(shipData);
 
-      // Rebuild snapshots
-      inv_rebuildAllSnapshots();
+      // Rebuild snapshots (non-fatal if a specific builder is absent)
+      if (typeof rebuildInventoryUAEFromLedger === 'function') rebuildInventoryUAEFromLedger();
+      if (typeof rebuildInventoryEGFromLedger === 'function') rebuildInventoryEGFromLedger();
 
       if (typeof safeAlert_ === 'function') {
         safeAlert_(
@@ -2266,6 +2735,7 @@ function syncShipmentsUaeEgToInventory() {
       return withLock_('SYNC_SHIP_UAE_EG_TO_INV', runner_);
     }
 
+    // Fallback lock
     const lock = LockService.getDocumentLock();
     lock.waitLock(30000);
     try {
@@ -2280,10 +2750,169 @@ function syncShipmentsUaeEgToInventory() {
   }
 }
 
+/** ===========================================================================
+ * UAE→EG Helpers (Ledger-derived basis + extras baseline)
+ * ===========================================================================
+ * These helpers are intentionally data-only and deterministic:
+ *  - UAE basis uses ledger netting: valueIn - valueOut (moving-average compatible)
+ *  - Extras baseline uses first observed (IN unit - OUT unit) per stableLineKey,
+ *    and is used to freeze extras-per-unit across partial deltas.
+ * ---------------------------------------------------------------------------
+ */
+
+function _sueg_normWh_(w) {
+  const t = String(w || '').trim();
+  return (typeof normalizeWarehouseCode_ === 'function') ? normalizeWarehouseCode_(t) : t;
+}
+
+function _sueg_isUaeWarehouseFallback_(wh) {
+  if (typeof _inv_isUaeWarehouse_ === 'function') return _inv_isUaeWarehouse_(wh);
+  const w = String(wh || '').trim().toUpperCase();
+  return w === 'KOR' || w === 'ATTIA' || w.indexOf('UAE') === 0;
+}
+
+/**
+ * Build UAE basis from ledger:
+ *   qty = Σ(qtyIn - qtyOut)
+ *   value = Σ(valueIn - valueOut)
+ *   avg = value / qty (when qty > 0)
+ *
+ * Returns: { "<SKU>||<WH>": { qty, value, avgCost } }
+ */
+function _sueg_buildUaeBasisFromLedger_(ledgerSh, ledgerMap) {
+  const idxSku = (ledgerMap[APP.COLS.INV_TXNS.SKU] || ledgerMap['SKU'] || 0) - 1;
+  const idxWh = (ledgerMap[APP.COLS.INV_TXNS.WAREHOUSE] || ledgerMap['Warehouse'] || 0) - 1;
+  const idxQtyIn = (ledgerMap[APP.COLS.INV_TXNS.QTY_IN] || ledgerMap['Qty In'] || 0) - 1;
+  const idxQtyOut = (ledgerMap[APP.COLS.INV_TXNS.QTY_OUT] || ledgerMap['Qty Out'] || 0) - 1;
+  const idxUnitCost = (ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] || ledgerMap['Unit Cost (EGP)'] || 0) - 1;
+  const idxTotalCost = (ledgerMap[APP.COLS.INV_TXNS.TOTAL_COST] || ledgerMap['Total Cost (EGP)'] || 0) - 1;
+
+  const out = {};
+  const lr = ledgerSh.getLastRow();
+  if (lr < 2 || idxSku < 0 || idxWh < 0) return out;
+
+  const vals = ledgerSh.getRange(2, 1, lr - 1, ledgerSh.getLastColumn()).getValues();
+
+  for (const r of vals) {
+    const sku = String(r[idxSku] || '').trim();
+    if (!sku) continue;
+
+    const wh = _sueg_normWh_(r[idxWh]);
+    if (!wh) continue;
+
+    if (!_sueg_isUaeWarehouseFallback_(wh)) continue;
+
+    const qtyIn = Number(r[idxQtyIn] || 0);
+    const qtyOut = Number(r[idxQtyOut] || 0);
+    if (qtyIn === 0 && qtyOut === 0) continue;
+
+    const unitCost = Number(r[idxUnitCost] || 0);
+    const totalCost = Number(r[idxTotalCost] || 0);
+
+    const valueIn = qtyIn > 0 ? (totalCost || (unitCost * qtyIn)) : 0;
+    const valueOut = qtyOut > 0 ? (totalCost || (unitCost * qtyOut)) : 0;
+
+    const key = sku + '||' + wh;
+    if (!out[key]) out[key] = { qty: 0, value: 0, avgCost: 0 };
+
+    out[key].qty += (qtyIn - qtyOut);
+    out[key].value += (valueIn - valueOut);
+  }
+
+  for (const k of Object.keys(out)) {
+    const rec = out[k];
+    if (rec.qty > 0 && rec.value > 0) {
+      rec.avgCost = rec.value / rec.qty;
+    } else {
+      rec.qty = Math.max(0, rec.qty);
+      // Clamp negative rounding drift to zero.
+      rec.value = Math.max(0, rec.value);
+      rec.avgCost = rec.qty ? (rec.value / rec.qty) : 0;
+    }
+  }
+
+  return out;
+}
+
+function _sueg_baseKeyNoType_(sourceId) {
+  const sid = String(sourceId || '').trim();
+  return sid.replace(/\|(IN|OUT)\s*$/i, '');
+}
+
+function _sueg_stableLineKeyFromBaseKey_(baseKeyNoType) {
+  const p = String(baseKeyNoType || '').split('|');
+  // SUEG|ShipmentID|LineDiscriminator|SKU|VariantKey|Sx|Dy
+  if (p.length < 5) return '';
+  return p.slice(0, 5).join('|');
+}
+
+/**
+ * Build extras baseline map:
+ * stableLineKey → baselineExtraPerUnit = (IN unitCost - OUT unitCost)
+ */
+function _sueg_buildUaeEgExtrasBaselineFromLedger_(ledgerSh, ledgerMap, tol) {
+  const idxSourceType = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type'] || 0) - 1;
+  const idxSourceId = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID'] || 0) - 1;
+  const idxUnitCost = (ledgerMap[APP.COLS.INV_TXNS.UNIT_COST] || ledgerMap['Unit Cost (EGP)'] || 0) - 1;
+
+  const lr = ledgerSh.getLastRow();
+  const baseline = {};
+  if (lr < 2 || idxSourceType < 0 || idxSourceId < 0 || idxUnitCost < 0) return baseline;
+
+  const vals = ledgerSh.getRange(2, 1, lr - 1, ledgerSh.getLastColumn()).getValues();
+
+  // Pairing map: baseKeyNoType → { inCost?, outCost? }
+  const pair = {};
+
+  for (const r of vals) {
+    const st = String(r[idxSourceType] || '').trim();
+    if (st !== 'SHIP_UAE_EG') continue;
+
+    const sid = String(r[idxSourceId] || '').trim();
+    if (!sid || sid.indexOf('SUEG|') !== 0) continue;
+
+    const kind = /\|IN\s*$/i.test(sid) ? 'IN' : (/\|OUT\s*$/i.test(sid) ? 'OUT' : '');
+    if (!kind) continue;
+
+    const base = _sueg_baseKeyNoType_(sid);
+    if (!pair[base]) pair[base] = { IN: null, OUT: null };
+
+    const u = Number(r[idxUnitCost] || 0);
+    pair[base][kind] = u;
+  }
+
+  for (const base of Object.keys(pair)) {
+    const p = pair[base];
+    if (p.IN == null || p.OUT == null) continue;
+
+    const stableKey = _sueg_stableLineKeyFromBaseKey_(base);
+    if (!stableKey) continue;
+
+    const diff = Number(p.IN) - Number(p.OUT);
+    if (!isFinite(diff)) continue;
+
+    if (baseline[stableKey] == null) {
+      baseline[stableKey] = diff;
+    } else if (Math.abs(Number(baseline[stableKey]) - diff) > (tol || 0.05)) {
+      // Keep first baseline, but log drift for review.
+      try {
+        logError_(
+          '_sueg_buildUaeEgExtrasBaselineFromLedger_',
+          new Error('Detected drift in extras-per-unit baseline across deltas for the same lineKey.'),
+          { stableLineKey: stableKey, existing: baseline[stableKey], observed: diff }
+        );
+      } catch (e) { }
+    }
+  }
+
+  return baseline;
+}
+
+
 /**
  * Debug helper for Inventory lookup.
  */
 function debugTestInventoryLookup_() {
-  var info = _getInventoryUaeInfoForSku_('MONSTER-MQT65-PURPLE', 'UAE-DXB');
+  const info = _getInventoryUaeInfoForSku_('MONSTER-MQT65-PURPLE', 'UAE-DXB');
   Logger.log(JSON.stringify(info));
 }
