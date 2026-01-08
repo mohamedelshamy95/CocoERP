@@ -1646,9 +1646,11 @@ function coco_hasPendingShipUaeEgInventorySync_() {
   const cShipId = map[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID] || map['Shipment ID'];
   const cSku = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
   const cQty = map[APP.COLS.SHIP_UAE_EG.QTY] || map['Qty'];
+  const cShipDate = map[APP.COLS.SHIP_UAE_EG.SHIP_DATE] || map['Ship Date'] || map['Ship Date (UAE)'];
+  const cArrival = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] || map['Actual Arrival'] || map['Actual Arrival (EG)'];
   const cSynced = map[APP.COLS.SHIP_UAE_EG.QTY_SYNCED] || map['Qty Synced'];
 
-  if (!cShipId || !cSku || !cQty) return false;
+  if (!cShipId || !cSku || !cQty || !cShipDate || !cArrival) return false;
 
   const lr = sh.getLastRow();
   if (lr < 2) return false;
@@ -1658,14 +1660,18 @@ function coco_hasPendingShipUaeEgInventorySync_() {
   const skus = sh.getRange(2, cSku, n, 1).getValues();
   const qtys = sh.getRange(2, cQty, n, 1).getValues();
   const synceds = cSynced ? sh.getRange(2, cSynced, n, 1).getValues() : null;
+  const shipDates = sh.getRange(2, cShipDate, n, 1).getValues();
+  const arrivals = sh.getRange(2, cArrival, n, 1).getValues();
 
   for (let i = 0; i < n; i++) {
     const sid = String(shipIds[i][0] || '').trim();
     const sku = String(skus[i][0] || '').trim();
     const qty = Number(qtys[i][0] || 0);
     const synced = synceds ? Number(synceds[i][0] || 0) : 0;
+    const shipDateVal = shipDates ? shipDates[i][0] : '';
+    const arrivalVal = arrivals ? arrivals[i][0] : '';
 
-    if (sid && sku && qty > synced) return true;
+    if (sid && sku && qty > synced && shipDateVal && arrivalVal) return true;
   }
   return false;
 }

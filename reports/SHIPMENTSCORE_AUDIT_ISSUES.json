@@ -1,0 +1,567 @@
+[
+  {
+    "id": "R1",
+    "severity": "P1",
+    "location": "ShipmentsCore.js:1017 (seedShipmentsUaeEgFromInventoryUae)",
+    "description": "Seeded planned rows can accumulate duplicates across runs (SKU+Warehouse+Variant) unless the manual dedupe helper is invoked; snapshot rebuild followed by seed may reintroduce legacy duplicates.",
+    "impact": "Multiple planned rows per key inflate planning totals and can confuse operators before shipment IDs are assigned.",
+    "fix_outline": "Run or embed seeded-row dedupe keyed by SKU+Warehouse+Variant (with seeded tag) after seeding/snapshot rebuild; skip re-appending if key already exists.",
+    "tests": [
+      "Seed twice from the same Inventory_UAE snapshot; expect no new planned rows.",
+      "Create duplicate seeded rows, run the dedupe helper; verify only earliest row remains."
+    ]
+  },
+  {
+    "id": "R2",
+    "severity": "P1",
+    "location": "ShipmentsCore.js:2364 (syncShipmentsUaeEgToInventory)",
+    "description": "Queue sync scans the full Shipments_UAE_EG sheet and ledger every run; on large data sets it risks exceeding trigger time and partial posting.",
+    "impact": "Timeouts can leave Qty Synced stale and ledger under-posted; repeated runs may reprocess partial batches.",
+    "fix_outline": "Batch or window processing (e.g., limited rows per run), cache ledger Txn/Source IDs once, and pre-filter rows by delta/status to reduce work.",
+    "tests": [
+      "Simulate 10k shipment rows with deltas; ensure sync completes within trigger window.",
+      "Repeat sync to confirm idempotent postings (no new Txn IDs)."
+    ]
+  },
+  {
+    "id": "R3",
+    "severity": "P2",
+    "location": "ShipmentsCore.js:364 (updateShipmentsUaeEgStatusAndTotals)",
+    "description": "Function throws when optional headers (ETA/Total/Customs/Other) are missing, blocking status rebuilds in partially configured sheets.",
+    "impact": "Menu/queue actions fail hard on layout drift, stopping downstream syncs.",
+    "fix_outline": "Relax required set to minimal status/cost columns; guard writes per column and log a single warning instead of throwing.",
+    "tests": [
+      "Remove an optional header (e.g., Total Cost) and run the function; expect no throw and status still computed."
+    ]
+  },
+  {
+    "id": "R4",
+    "severity": "P2",
+    "location": "ShipmentsCore.js:2060 (syncQCtoInventory_UAE)",
+    "description": "If QC lacks Purchases Line ID or Purchases lacks warehouse, the row is skipped silently except for a generic rate-limited missing-warehouse log; no per-row tag for missing Purchases linkage.",
+    "impact": "QC rows can remain unsynced without clear row-level feedback, leading to under-posted inventory.",
+    "fix_outline": "Add per-row tag/note when Purchases Line ID or warehouse cannot be resolved; rate-limit by row key; continue token-safe notes.",
+    "tests": [
+      "QC row missing Purchases Line ID: expect tagged note and no ledger posting; rerun does not duplicate tags.",
+      "QC row with warehouse only in Purchases: expect fallback to Purchases warehouse."
+    ]
+  },
+  {
+    "id": "R5",
+    "severity": "P3",
+    "location": "ShipmentsCore.js:249 (shipmentsCnUaeOnEdit_)",
+    "description": "On every edit the handler builds the full header map before checking edited columns; acceptable for small sheets but can be optimized.",
+    "impact": "Unnecessary overhead on large paste operations; minor latency in onEdit.",
+    "fix_outline": "Early-check edited column range against cached header map or cache map once per event in the dispatcher.",
+    "tests": [
+      "Paste a large block into Shipments_CN_UAE and measure onEdit duration before/after optimization."
+    ]
+  },
+  {
+    "id": "SCS-001",
+    "severity": "P0",
+    "location": {
+      "function": "_updateShipmentUaeEgRowTotalsAndStatus_",
+      "approxLineStart": 1180,
+      "approxLineEnd": 1295
+    },
+    "symptom": "Runtime crash on Shipments_UAE_EG edits: ReferenceError colArrival is not defined; totals/status not updated.",
+    "rootCause": "Variable mismatch: colArr is declared for arrival column but colArrival is referenced.",
+    "fixIntent": "Use the declared arrival column variable consistently (colArr) when reading arrival values; ensure row updater never throws.",
+    "acceptanceCriteria": [
+      "Editing any recalc column (Qty/Ship Cost/Customs/Other/Ship Date/ETA/Arrival) does not throw.",
+      "Status transitions to Arrived EG when Arrival is present and to In Transit/Delayed otherwise."
+    ],
+    "edgeCases": [
+      "Arrival cell contains string date not Date object",
+      "ETA blank but Ship Date present",
+      "Headers missing: function should no-op without throwing"
+    ],
+    "touchesAppCore": true,
+    "tests": [
+      "Edit a Shipments_UAE_EG row's 'Actual Arrival (EG)' cell -> expected: no error, Status becomes 'Arrived EG'.",
+      "Edit 'Qty' and 'Ship Cost' -> expected: Total Cost recalculates and is formatted; no error.",
+      "Remove Arrival value -> expected: Status becomes 'In Transit' or 'Planned' depending on Ship Date."
+    ]
+  },
+  {
+    "id": "SCS-002",
+    "severity": "P0",
+    "location": {
+      "function": "updateShipmentsUaeEgStatusAndTotals",
+      "approxLineStart": 364,
+      "approxLineEnd": 520
+    },
+    "symptom": "Deploy-blocker if real: syntax/parse error (incomplete if/else) prevents script from running or passing syntax checks.",
+    "rootCause": "The provided excerpt shows an incomplete branch: `if (interactive && typeof safeAlert_ === 'function')      else` which is invalid JavaScript.",
+    "fixIntent": "Ensure empty-sheet branch contains valid statements (alert/log then return).",
+    "acceptanceCriteria": [
+      "npm run check:syntax passes",
+      "Function returns cleanly when the sheet has no data rows"
+    ],
+    "edgeCases": [
+      "This may be a summarization artifact; verify in the actual file content at the indicated location before acting."
+    ],
+    "touchesAppCore": false,
+    "tests": [
+      "Run npm run check:syntax -> expected: pass.",
+      "Run updateShipmentsUaeEgStatusAndTotals on an empty Shipments_UAE_EG sheet -> expected: returns without exception."
+    ]
+  },
+  {
+    "id": "SCS-003",
+    "severity": "P0",
+    "location": {
+      "function": "_getInventoryUaeInfoForSku_ / _sueg_buildUaeBasisFromLedger_ (multiple guards)",
+      "approxLineStart": 820,
+      "approxLineEnd": 2860
+    },
+    "symptom": "If real: inventory lookup/basis computations can be incorrect (wrong SKU matched, wrong cost basis, wrong stock warnings).",
+    "rootCause": "Multiple guard lines appear as `if (cond)` with no visible `continue/return`. If this is real code (not excerpt truncation), loop control is broken.",
+    "fixIntent": "Ensure all guard checks that are intended to skip rows actually `continue` the loop; do not conditionally execute the next statement as the only body.",
+    "acceptanceCriteria": [
+      "Inventory lookup returns matching SKU rows only.",
+      "Basis builder only includes UAE warehouses and only for rows with qty movement."
+    ],
+    "edgeCases": [
+      "This finding is a hypothesis due to excerpt truncation; verify the presence of `continue;` in the actual file."
+    ],
+    "touchesAppCore": false,
+    "tests": [
+      "Lookup SKU that exists in Inventory_UAE in multiple warehouses -> expected: returns correct warehouse match when hint provided.",
+      "Lookup SKU that does not exist -> expected: returns null.",
+      "Build UAE basis with mixed ledger rows -> expected: only UAE warehouses included."
+    ]
+  },
+  {
+    "id": "SCS-004",
+    "severity": "P1",
+    "location": {
+      "function": "syncShipmentsUaeEgToInventory",
+      "approxLineStart": 2288,
+      "approxLineEnd": 2860
+    },
+    "symptom": "Wrong Egypt warehouse posted (e.g., TAN-GH/TAN), splitting EG inventory and violating canonical requirement EG-TAN only.",
+    "rootCause": "Legacy EG warehouse codes are referenced by comments and prior hardening patch context; destination warehouse likely not forced to EG-TAN.",
+    "fixIntent": "Force all SHIP_UAE_EG IN postings to warehouse exactly 'EG-TAN' after normalization, regardless of legacy aliases.",
+    "acceptanceCriteria": [
+      "All ledger rows with SourceType=SHIP_UAE_EG and Type=IN have Warehouse exactly 'EG-TAN'.",
+      "Inventory_EG snapshot shows stock under EG-TAN only after rebuild."
+    ],
+    "edgeCases": [
+      "Existing legacy ledger rows remain with old warehouse labels; rebuild should normalize output buckets",
+      "Shipments rows with blank warehouse UAE should not post until resolved"
+    ],
+    "touchesAppCore": true,
+    "tests": [
+      "Create a ready Shipments_UAE_EG row (Qty>QtySynced, ShipDate+Arrival set) -> run sync -> expected: IN warehouse = EG-TAN.",
+      "Rerun sync -> expected: 0 new ledger rows (idempotent).",
+      "Rebuild Inventory_EG snapshot -> expected: only EG-TAN bucket is used."
+    ]
+  },
+  {
+    "id": "SCS-005",
+    "severity": "P1",
+    "location": {
+      "function": "syncShipmentsUaeEgToInventory (readiness gate) + AppCore coco_hasPendingShipUaeEgInventorySync_ (auto-detect)",
+      "approxLineStart": 2288,
+      "approxLineEnd": 2860
+    },
+    "symptom": "Repeated queue churn: rows with Qty>QtySynced but missing ShipDate/Arrival/Warehouse keep re-flagging and re-skipping every minute; ErrorLog noise and wasted runtime.",
+    "rootCause": "AppCore auto-detect flags based on delta only, while ShipmentsCore sync gates on readiness fields; no persistent 'blocked' marker or readiness-aware flagging.",
+    "fixIntent": "Align detection with readiness or add stable row-level markers and rate-limited ErrorLog entries to prevent repeated processing of incomplete rows.",
+    "acceptanceCriteria": [
+      "Incomplete rows do not cause repeated per-minute ErrorLog spam.",
+      "Queue does not repeatedly run heavy sync for permanently incomplete rows."
+    ],
+    "edgeCases": [
+      "Status says Arrived but Arrival date missing",
+      "Qty increases after being blocked: row should be reconsidered once prerequisites are met"
+    ],
+    "touchesAppCore": true,
+    "tests": [
+      "Create a row with Qty>QtySynced and missing Arrival -> run queue twice -> expected: at most one logged warning per rate window and row is tagged once.",
+      "Fill Arrival and rerun -> expected: posts once, QtySynced advances, tag cleared per policy.",
+      "Rerun again -> expected: 0 new ledger rows."
+    ]
+  },
+  {
+    "id": "SCS-006",
+    "severity": "P1",
+    "location": {
+      "function": "seedShipmentsUaeEgFromInventoryUae",
+      "approxLineStart": 1017,
+      "approxLineEnd": 1180
+    },
+    "symptom": "Planned/seeded row duplication across variants and repeated seed cycles; operators see multiple planned rows per SKU/WH/variant.",
+    "rootCause": "Seed identity key is SKU||WH only; variant is ignored even though Variant column exists in the layout.",
+    "fixIntent": "Include Variant (and any other discriminator used in Shipments_UAE_EG) in the key; ensure seeding is idempotent and does not create additional planned duplicates.",
+    "acceptanceCriteria": [
+      "After seeding, there is at most one planned row (blank Shipment ID) per SKU+Variant+Warehouse.",
+      "Seeding twice produces no additional rows."
+    ],
+    "edgeCases": [
+      "Legacy duplicates already exist: seeding must not create more; dedupe policy must be deterministic",
+      "Warehouse aliases must be normalized before keying"
+    ],
+    "touchesAppCore": true,
+    "tests": [
+      "Create two Inventory_UAE rows with same SKU but different Variant and same WH -> seed -> expected: two distinct planned rows.",
+      "Seed twice -> expected: second run makes no new rows.",
+      "If duplicates exist in Shipments_UAE_EG already -> seed -> expected: does not multiply duplicates."
+    ]
+  },
+  {
+    "id": "SCS-007",
+    "severity": "P1",
+    "location": {
+      "function": "resolveUaeWarehouseFromCourier_",
+      "approxLineStart": 780,
+      "approxLineEnd": 818
+    },
+    "symptom": "Disallowed UAE warehouse code (UAE-DXB) can be written into Shipments_UAE_EG and used as source warehouse hint, conflicting with required canonical set (KOR/ATTIA).",
+    "rootCause": "Resolver defaults to UAE-DXB for unknown/blank courier.",
+    "fixIntent": "Change resolver policy to avoid emitting UAE-DXB (blank/unknown or map only to KOR/ATTIA); ensure normalization enforces allowed set at ledger boundary.",
+    "acceptanceCriteria": [
+      "No path in ShipmentsCore writes UAE-DXB into Shipments_UAE_EG warehouse fields if policy disallows it.",
+      "Ledger postings only use canonical UAE warehouses."
+    ],
+    "edgeCases": [
+      "Courier cell blank",
+      "Courier contains Arabic variants",
+      "Warehouse already filled manually: resolver should not overwrite"
+    ],
+    "touchesAppCore": false,
+    "tests": [
+      "Set Courier to unknown value, leave Warehouse blank, edit SKU -> expected: Warehouse remains blank or becomes KOR/ATTIA only.",
+      "Set Warehouse manually then edit SKU -> expected: Warehouse not overwritten."
+    ]
+  },
+  {
+    "id": "SCS-008",
+    "severity": "P2",
+    "location": {
+      "function": "syncShipmentsUaeEgToInventory",
+      "approxLineStart": 2288,
+      "approxLineEnd": 2860
+    },
+    "symptom": "Performance risk: full-sheet reads/writes + full ledger scans each run; timeouts and lock contention in 1-minute queue.",
+    "rootCause": "No row windowing; writes back entire Shipments range even when only a few rows change.",
+    "fixIntent": "Implement row windowing and write only changed rows/columns; reuse a single ledger read per run to derive basis/baseline/dedupe sets.",
+    "acceptanceCriteria": [
+      "Idle run (no deltas) completes quickly without full writeback.",
+      "Large sheet (10k rows) can be processed across multiple queue ticks without timeout."
+    ],
+    "edgeCases": [
+      "Partial progress across runs must remain idempotent",
+      "Lock release on early exit must be guaranteed"
+    ],
+    "touchesAppCore": true,
+    "tests": [
+      "With 10k Shipments_UAE_EG rows and only 1 ready delta -> run sync -> expected: completes under time budget.",
+      "Run sync again -> expected: no new ledger rows.",
+      "Simulate repeated queue ticks -> expected: progress continues without reprocessing already-synced rows."
+    ]
+  },
+  {
+    "id": "SCS-009",
+    "severity": "P2",
+    "location": {
+      "function": "seedShipmentsUaeEgFromInventoryUae",
+      "approxLineStart": 1120,
+      "approxLineEnd": 1180
+    },
+    "symptom": "Slow seeding due to per-row update loop; increased chance of timeouts.",
+    "rootCause": "Uses per-row `getRange(...).setValues([row])` for updated planning rows.",
+    "fixIntent": "Batch updates into contiguous segments and reduce calls to Spreadsheet service.",
+    "acceptanceCriteria": [
+      "Seeding completes within execution limits for large Inventory_UAE snapshots.",
+      "No behavior change: still idempotent."
+    ],
+    "edgeCases": [
+      "Non-contiguous planned rows require segmented batching"
+    ],
+    "touchesAppCore": false,
+    "tests": [
+      "Seed with 2000 inventory rows -> expected: completes without timeout.",
+      "Seed twice -> expected: no new rows added."
+    ]
+  },
+  {
+    "id": "SCS-010",
+    "severity": "P2",
+    "location": {
+      "function": "rebuildShipmentsCnUaeStatus_ / _updateShipmentCnUaeStatusForRow_",
+      "approxLineStart": 168,
+      "approxLineEnd": 363
+    },
+    "symptom": "Slow rebuild for large CN shipments due to per-row full-row writes.",
+    "rootCause": "Row helper reads and writes full row for every iteration; rebuild loops over rows.",
+    "fixIntent": "Rebuild in bulk: compute arrays and write only computed columns (Status/Total).",
+    "acceptanceCriteria": [
+      "Rebuild time scales linearly with rows but stays within manual execution window for typical sizes."
+    ],
+    "edgeCases": [
+      "Rows with empty Shipment ID must be cleared for Status/Total"
+    ],
+    "touchesAppCore": false,
+    "tests": [
+      "Run rebuild on 2000-row Shipments_CN_UAE -> expected: completes without timeout; correct statuses."
+    ]
+  },
+  {
+    "id": "SCS-011",
+    "severity": "P2",
+    "location": {
+      "function": "syncQCtoInventory_UAE",
+      "approxLineStart": 1987,
+      "approxLineEnd": 2287
+    },
+    "symptom": "Queue runtime grows with ledger size because QC sync scans full ledger to determine already-synced rows.",
+    "rootCause": "Ledger scan is performed every run without caching/pointering.",
+    "fixIntent": "Rely on stable Source IDs and ledger-side deterministic Txn ID dedupe; optionally track last processed QC row/id pointer in DocumentProperties.",
+    "acceptanceCriteria": [
+      "QC sync rerun adds 0 new ledger rows (idempotent).",
+      "QC sync runtime remains reasonable as ledger grows."
+    ],
+    "edgeCases": [
+      "Legacy rows deduped by notes row number must be handled deterministically"
+    ],
+    "touchesAppCore": true,
+    "tests": [
+      "Run QC sync twice for same QC rows -> expected: second run appends 0.",
+      "With large ledger (50k rows) and no new QC -> expected: returns quickly."
+    ]
+  },
+  {
+    "id": "SCS-012",
+    "severity": "P2",
+    "location": {
+      "function": "syncShipmentsUaeEgToInventory (logging) / syncQCtoInventory_UAE (missing prereqs)",
+      "approxLineStart": 2288,
+      "approxLineEnd": 2860
+    },
+    "symptom": "Operator noise: inconsistent rate limiting and missing row-level tags cause repeated confusion and possible ErrorLog spam on incomplete rows.",
+    "rootCause": "Baseline mismatch has a global rate limit key, but missing readiness/warehouse tags and per-row rate-limit signatures are not consistently enforced.",
+    "fixIntent": "Standardize rate-limit keys (versioned, per-row stable signature) and token-safe row notes/tags for missing prereqs; avoid per-minute identical errors.",
+    "acceptanceCriteria": [
+      "Repeated queue ticks do not generate repeated identical ErrorLog entries for the same row.",
+      "Rows missing prerequisites are visibly marked on the row itself exactly once."
+    ],
+    "edgeCases": [
+      "Row moved/sorted: tag remains with the row; identity must not depend on row number",
+      "Multiple prerequisites missing: tags should be additive and token-safe"
+    ],
+    "touchesAppCore": true,
+    "tests": [
+      "Create shipments row with missing Arrival and Qty>QtySynced -> run queue twice -> expected: 1 ErrorLog per window and row tag present.",
+      "Fix the missing field -> expected: tag removed and sync proceeds once."
+    ]
+  },
+  {
+    "module": "ShipmentsCore.js",
+    "generatedAt": "2026-01-07T00:00:00.000Z",
+    "issues": [
+      {
+        "id": "SHP-P0-001",
+        "severity": "P0",
+        "title": "qcOnEdit_ can throw because it doesn't guard all headers required by qc_recalcRows_",
+        "location": { "function": "qcOnEdit_ / qc_recalcRows_", "approxLines": "L1900-L2100" },
+        "symptom": "Editing QC_UAE driving qty columns can crash trigger with 'qc_recalcRows_: Missing QC_UAE columns ...'.",
+        "rootCause": "qcOnEdit_ checks only Ordered/Received/Defective, but qc_recalcRows_ requires Missing/OK too and throws if absent.",
+        "repro": [
+          "Rename/remove 'Qty Missing' or 'Qty OK' header in QC_UAE.",
+          "Edit 'Qty Received' in a data row.",
+          "Observe trigger error / ErrorLog entry."
+        ],
+        "fixDirection": [
+          "Make qcOnEdit_ guard the full required column set (Ordered/Received/Defective/Missing/OK) before calling qc_recalcRows_.",
+          "Alternatively, make qc_recalcRows_ non-throwing in trigger contexts (log + return) to preserve trigger safety."
+        ],
+        "risks": [
+          "Trigger instability; interrupts workflow and increases ErrorLog noise.",
+          "Users may think QC computed fields are updating when they are not."
+        ],
+        "dependencies": [
+          "AppCore.js:_dispatchOnEdit_",
+          "ShipmentsCore.js:qc_recalcRows_",
+          "AppCore.js:logError_"
+        ]
+      },
+      {
+        "id": "SHP-P0-002",
+        "severity": "P0",
+        "title": "QC ledger dedupe/identity can be row-number based (QC_ROW_<row>) causing duplicates when rows move",
+        "location": { "function": "syncQCtoInventory_UAE", "approxLines": "L2200-L2700" },
+        "symptom": "Duplicate QC_UAE ledger postings possible if QC ID is blank and row order changes (insert/sort).",
+        "rootCause": "Fallback QC identity uses sheet row number ('QC_ROW_<sheetRow>'); legacy dedupe also parses row number from notes, both unstable under row moves.",
+        "repro": [
+          "Create QC_UAE row with blank QC ID and Qty OK > 0.",
+          "Run syncQCtoInventory_UAE (posts).",
+          "Insert a new row above so the QC row number changes.",
+          "Run syncQCtoInventory_UAE again; observe potential second post."
+        ],
+        "fixDirection": [
+          "Require a stable QC ID for posting; if missing, skip and tag the row (no ledger write).",
+          "Or generate and persist a stable QC ID in QC_UAE before posting."
+        ],
+        "risks": [
+          "Ledger duplication (source of truth corrupted).",
+          "Inventory snapshots overstated."
+        ],
+        "dependencies": [
+          "InventoryCore.js:logInventoryTxnBatch_",
+          "AppCore.js:coco_processSyncQueue"
+        ]
+      },
+      {
+        "id": "SHP-P0-003",
+        "severity": "P0",
+        "title": "QC postings use txnDate fallback to new Date() (non-deterministic Txn IDs)",
+        "location": { "function": "syncQCtoInventory_UAE", "approxLines": "L2550-L2660" },
+        "symptom": "Repeated QC sync runs may generate different txn identifiers/timestamps for the same QC event if QC Date is blank, increasing duplicate risk.",
+        "rootCause": "txnDate is set as qcDate || new Date() in the txn payload.",
+        "repro": [
+          "Ensure QC Date is blank on a QC row with Qty OK > 0.",
+          "Run syncQCtoInventory_UAE twice at different times.",
+          "Inspect Inventory_Transactions for multiple QC_UAE IN rows for the same QC row."
+        ],
+        "fixDirection": [
+          "Require QC Date for posting, or derive and persist a deterministic date before posting.",
+          "Ensure the deterministic Txn ID computation uses only stable inputs."
+        ],
+        "risks": [
+          "Duplicate ledger rows if dedupe is not purely sourceId-based.",
+          "Hard-to-reconcile inventory movement timing."
+        ],
+        "dependencies": [
+          "InventoryCore.js:_inv_makeTxnId_",
+          "InventoryCore.js:logInventoryTxnBatch_"
+        ]
+      },
+      {
+        "id": "SHP-P0-004",
+        "severity": "P0",
+        "title": "Hypothesis: syncPurchasesToShipmentsCnUae maxSeq detection block may be incomplete (Shipment ID collisions)",
+        "location": { "function": "syncPurchasesToShipmentsCnUae", "approxLines": "L650-L780" },
+        "symptom": "New Shipment IDs may collide with existing ones if maxSeq is not updated correctly.",
+        "rootCause": "Excerpt shows 'if (n > maxSeq)' without a visible assignment; may be truncation or a real logic omission.",
+        "repro": [
+          "Ensure Shipments_CN_UAE has existing Shipment IDs (e.g., CN-000123).",
+          "Run syncPurchasesToShipmentsCnUae.",
+          "Observe whether newly created Shipment IDs restart at CN-000001 or collide."
+        ],
+        "fixDirection": [
+          "Verify real file content: ensure maxSeq updates when a larger numeric suffix is found.",
+          "Add regression test for maxSeq increment behavior."
+        ],
+        "risks": [
+          "Broken mapping Purchases→Shipments→QC; downstream gating by Shipment ID becomes unreliable."
+        ],
+        "dependencies": [
+          "AppCore.js:coco_processSyncQueue"
+        ]
+      },
+      {
+        "id": "SHP-P1-001",
+        "severity": "P1",
+        "title": "EG warehouse canonicalization depends on config/normalization; must enforce EG-TAN only at posting boundary",
+        "location": { "function": "syncShipmentsUaeEgToInventory", "approxLines": "L2750-L3050" },
+        "symptom": "SHIP_UAE_EG IN postings can land in legacy EG warehouse aliases (e.g., TAN-GH/TAN) if normalization mapping does not collapse to EG-TAN.",
+        "rootCause": "toWarehouseRaw uses (APP.WAREHOUSES.EG_TAN || APP.WAREHOUSES.TAN_GH) then normalizes; correctness depends on AppCore mappings.",
+        "repro": [
+          "Disable/omit APP.WAREHOUSES.EG_TAN or configure normalization to return TAN-GH.",
+          "Run syncShipmentsUaeEgToInventory.",
+          "Inspect Inventory_Transactions Warehouse for IN rows."
+        ],
+        "fixDirection": [
+          "Force warehouse for SHIP_UAE_EG IN to the literal 'EG-TAN' before ledger write.",
+          "Keep normalization for legacy reads but ensure canonical write."
+        ],
+        "risks": [
+          "Inventory_EG snapshot splits by warehouse; reporting inconsistency.",
+          "Harder reconciliation across legacy data."
+        ],
+        "dependencies": [
+          "AppCore.js:normalizeWarehouseCode_",
+          "InventoryCore.js:rebuildInventoryEGFromLedger",
+          "AppCore.js:coco_processSyncQueue"
+        ]
+      },
+      {
+        "id": "SHP-P1-002",
+        "severity": "P1",
+        "title": "Readiness gate vs AppCore pending detection can cause repeated queue churn on incomplete rows",
+        "location": { "function": "syncShipmentsUaeEgToInventory (readiness skip)", "approxLines": "L2850-L3050" },
+        "symptom": "Rows with Qty>QtySynced but missing Ship Date/Arrival are skipped; AppCore continues flagging every minute, wasting runtime and generating recurring warnings.",
+        "rootCause": "AppCore pending detection flags on delta only; Shipments sync requires deterministic dates and skips otherwise.",
+        "repro": [
+          "Create Shipments_UAE_EG row with Qty>0, Qty Synced=0, missing Actual Arrival (EG).",
+          "Wait for queue ticks.",
+          "Observe repeated skipped processing/logs."
+        ],
+        "fixDirection": [
+          "Make AppCore pending detection readiness-aware OR mark blocked rows and avoid reflagging until prerequisites exist.",
+          "Keep rate-limited logs; add row-level tags instead of repeated ErrorLog."
+        ],
+        "risks": [
+          "Trigger time budget exhaustion as sheet grows.",
+          "Operator confusion due to 'stuck' rows."
+        ],
+        "dependencies": [
+          "AppCore.js:coco_hasPendingShipUaeEgInventorySync_",
+          "AppCore.js:coco_processSyncQueue",
+          "AppCore.js:PropertiesService keys (APP.INTERNAL.*)"
+        ]
+      },
+      {
+        "id": "SHP-P1-003",
+        "severity": "P1",
+        "title": "Extras baseline builder exits early on legacy Source IDs, producing incomplete baseline map",
+        "location": { "function": "_sueg_buildUaeEgExtrasBaselineFromLedger_", "approxLines": "L3070-L3160" },
+        "symptom": "Extras-per-unit baseline may be missing for many lines, causing landed cost to drift across partial deltas and generating mismatch noise.",
+        "rootCause": "Inside the per-row loop, code uses 'return' when Source ID is missing or not SUEG|..., aborting the entire function rather than skipping that row.",
+        "repro": [
+          "Ensure ledger has SHIP_UAE_EG rows where Source ID is not prefixed by 'SUEG|'.",
+          "Run syncShipmentsUaeEgToInventory (which calls baseline builder).",
+          "Observe baseline mismatch behavior and inconsistent extras freezing."
+        ],
+        "fixDirection": [
+          "Replace function-level return with per-row skip (continue) and scan all ledger rows deterministically.",
+          "Log drift only after full scan (rate-limited)."
+        ],
+        "risks": [
+          "Incorrect landed costs on EG IN transactions for partial shipments.",
+          "Noisy logs that hide real issues."
+        ],
+        "dependencies": [
+          "ShipmentsCore.js:syncShipmentsUaeEgToInventory",
+          "AppCore.js:logError_"
+        ]
+      },
+      {
+        "id": "SHP-P2-001",
+        "severity": "P2",
+        "title": "Shipments UAE→EG sync writes back the full sheet range every run (write amplification)",
+        "location": { "function": "syncShipmentsUaeEgToInventory", "approxLines": "L3000-L3080" },
+        "symptom": "High runtime/lock contention; higher timeout risk for 1-minute queue.",
+        "rootCause": "Full-range setValues(shipData) even when only a few rows/columns changed.",
+        "repro": [
+          "Populate Shipments_UAE_EG with thousands of rows, with only one delta row.",
+          "Run syncShipmentsUaeEgToInventory.",
+          "Observe slow execution / quota pressure."
+        ],
+        "fixDirection": [
+          "Write only changed columns (Qty Synced, Line ID, optional fills) and only affected rows, batched into contiguous segments."
+        ],
+        "risks": [
+          "Trigger timeouts causing partial progress and repeated retries."
+        ],
+        "dependencies": [
+          "AppCore.js:withLock_",
+          "AppCore.js:coco_processSyncQueue"
+        ]
+      }
+    ]
+  }
+]
