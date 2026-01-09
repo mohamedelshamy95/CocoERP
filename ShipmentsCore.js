@@ -2570,6 +2570,8 @@ function syncShipmentsUaeEgToInventory() {
 
       const colShipWhUae = shipMap[APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE] || shipMap['Warehouse (UAE)'];
       const idxShipWhUae = colShipWhUae ? colShipWhUae - 1 : null;
+      const colShipNotes = shipMap[APP.COLS.SHIP_UAE_EG.NOTES] || shipMap['Notes'] || shipMap['Shipment Notes'] || null;
+      const idxShipNotes = colShipNotes ? colShipNotes - 1 : null;
 
       // ===== Inventory_UAE snapshot map for product/variant/last source id (NOT for avg-cost; we derive cost from ledger) =====
       const uaeLastRow = invUaeSh.getLastRow();
