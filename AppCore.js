@@ -58,6 +58,7 @@ const APP = {
     QC_UAE: 'QC_UAE',
     SHIP_CN_UAE: 'Shipments_CN_UAE',
     SHIP_UAE_EG: 'Shipments_UAE_EG',
+    RECEIPTS_EG: 'Receipts_EG',
 
     // Inventory
     INVENTORY_TXNS: 'Inventory_Transactions',
@@ -181,6 +182,7 @@ const APP = {
       PRODUCT_NAME: 'Product Name',
       VARIANT: 'Variant / Color',
       QTY: 'Qty',
+      QTY_OUT_SYNCED: 'Qty Out Synced',
       QTY_SYNCED: 'Qty Synced',
       SHIP_COST: 'Ship Cost (EGP) – per unit',
       CUSTOMS: 'Customs (EGP) – per unit',
@@ -188,6 +190,24 @@ const APP = {
       TOTAL_COST: 'Total Cost (EGP)',
       LINE_ID: 'Line ID',
       NOTES: 'Notes'
+    },
+
+    RECEIPTS_EG: {
+      GRN_ID: 'GRN ID',
+      GRN_LINE_ID: 'GRN Line ID',
+      RECEIPT_DATE: 'Receipt Date',
+      WAREHOUSE_EG: 'Warehouse (EG)',
+      WAREHOUSE_UAE: 'Warehouse (UAE)',
+      SHIPMENT_ID: 'Shipment ID',
+      SHIPMENT_LINE_ID: 'Shipments Line ID',
+      SKU: 'SKU',
+      PRODUCT_NAME: 'Product Name',
+      VARIANT: 'Variant / Color',
+      QTY_RECEIVED: 'Qty Received',
+      NOTES: 'Notes',
+      POSTED_TXN_ID: 'Posted Txn ID',
+      SYNC_STATUS: 'Sync Status',
+      LAST_SYNCED_AT: 'Last Synced At'
     },
 
     INV_TXNS: {
@@ -314,7 +334,8 @@ const APP = {
     FX_CNY_EGP: 'FX CNY→EGP',
     FX_AED_EGP: 'Default FX AED→EGP',
     SHIP_UAE_EG_ORDER: 'Default Ship UAE→EG (EGP) / order',
-    CUSTOMS_PCT: 'Default Customs % (e.g. 0.20 = 20%)'
+    CUSTOMS_PCT: 'Default Customs % (e.g. 0.20 = 20%)',
+    ENABLE_RECEIPTS_EG_GRN_V1: 'Enable Receipts_EG GRN Flow (v1)'
   },
 
   SETTINGS_LIST_HEADERS: {
@@ -354,7 +375,12 @@ const APP = {
     // Shipments UAE→EG → Inventory sync flag
     SHIP_UAE_EG_INV_SYNC_FLAG: 'CocoERP_ShipUaeEgInvSyncFlag_v1',
     SHIP_UAE_EG_INV_LAST_RUN: 'CocoERP_ShipUaeEgInvLastRun_v1',
-    SHIP_UAE_EG_INV_LAST_ERROR: 'CocoERP_ShipUaeEgInvLastError_v1'
+    SHIP_UAE_EG_INV_LAST_ERROR: 'CocoERP_ShipUaeEgInvLastError_v1',
+
+    // Receipts EG (GRN) → Inventory sync flag
+    RECEIPTS_EG_INV_SYNC_FLAG: 'CocoERP_ReceiptsEgInvSyncFlag_v1',
+    RECEIPTS_EG_INV_LAST_RUN: 'CocoERP_ReceiptsEgInvLastRun_v1',
+    RECEIPTS_EG_INV_LAST_ERROR: 'CocoERP_ReceiptsEgInvLastError_v1'
 
   }
 };
@@ -735,6 +761,7 @@ function ensureSettingsSheet_() {
     if (APP.SETTINGS_KEYS.FX_USD_EGP) addIfMissing_(APP.SETTINGS_KEYS.FX_USD_EGP, 0);
     addIfMissing_(APP.SETTINGS_KEYS.SHIP_UAE_EG_ORDER, 0);
     addIfMissing_(APP.SETTINGS_KEYS.CUSTOMS_PCT, 0.20);
+    addIfMissing_(APP.SETTINGS_KEYS.ENABLE_RECEIPTS_EG_GRN_V1, 0);
 
     if (toAppend.length) {
       sh.getRange(sh.getLastRow() + 1, keyCol, toAppend.length, 2).setValues(toAppend);
@@ -797,8 +824,22 @@ function getSettingsMap_() {
 
 function getSetting_(key, defaultValue) {
   const map = getSettingsMap_();
-  const v = map[key];
-  return (v === undefined || v === null || v === '') ? defaultValue : v;
+  /** allow fallback between arrow (→) and ascii (->) to survive encoding drift */
+  const variants = (function () {
+    const out = [key];
+    if (typeof key === 'string') {
+      if (key.indexOf('→') !== -1) out.push(key.replace(/→/g, '->'));
+      if (key.indexOf('->') !== -1) out.push(key.replace(/->/g, '→'));
+    }
+    return out;
+  })();
+
+  for (let i = 0; i < variants.length; i++) {
+    const k = variants[i];
+    const v = map[k];
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return defaultValue;
 }
 
 function getDefaultFxAedEgp_() {
@@ -1116,6 +1157,15 @@ function _dispatchOnEdit_(e) {
     try { coco_enqueueOrdersSyncFromPurchasesEdit_(e); } catch (err) { logError_('coco_enqueueOrdersSyncFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
     try { coco_enqueueQcGenFromPurchasesEdit_(e); } catch (err) { logError_('coco_enqueueQcGenFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
     try { coco_flagShipmentsCnUaeSyncFromPurchasesEdit_(e); } catch (err) { logError_('coco_flagShipmentsCnUaeSyncFromPurchasesEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
+    return;
+  }
+
+  // Receipts_EG (GRN) defaults
+  if (name === APP.SHEETS.RECEIPTS_EG || name === 'Receipts_EG') {
+    try { if (typeof receiptsEgOnEdit_ === 'function') receiptsEgOnEdit_(e); } catch (err) {
+      logError_('receiptsEgOnEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() });
+    }
+    try { coco_flagReceiptsEgInventorySyncFromEdit_(e); } catch (err) { logError_('coco_flagReceiptsEgInventorySyncFromEdit_', err, { sheet: name, a1: e && e.range && e.range.getA1Notation() }); }
     return;
   }
 
@@ -1593,6 +1643,38 @@ function coco_flagQcInventorySyncFromQcEdit_(e) {
   }
 }
 
+function coco_flagReceiptsEgInventorySyncFromEdit_(e) {
+  try {
+    if (!e || !e.range) return;
+    const sh = e.range.getSheet();
+    if (!sh || (sh.getName() !== APP.SHEETS.RECEIPTS_EG && sh.getName() !== 'Receipts_EG')) return;
+    const map = getHeaderMap_(sh, 1);
+    const c1 = e.range.getColumn();
+    const c2 = c1 + (e.range.getNumColumns ? e.range.getNumColumns() : 1) - 1;
+    const candidates = [
+      APP.COLS.RECEIPTS_EG.GRN_ID,
+      APP.COLS.RECEIPTS_EG.GRN_LINE_ID,
+      APP.COLS.RECEIPTS_EG.RECEIPT_DATE,
+      APP.COLS.RECEIPTS_EG.WAREHOUSE_EG,
+      APP.COLS.RECEIPTS_EG.WAREHOUSE_UAE,
+      APP.COLS.RECEIPTS_EG.SKU,
+      APP.COLS.RECEIPTS_EG.VARIANT,
+      APP.COLS.RECEIPTS_EG.QTY_RECEIVED,
+      APP.COLS.RECEIPTS_EG.NOTES
+    ];
+    let hit = false;
+    for (let i = 0; i < candidates.length; i++) {
+      const col = map[candidates[i]];
+      if (col && col >= c1 && col <= c2) { hit = true; break; }
+    }
+    if (!hit) return;
+    if (!_isReceiptsEgGrnEnabled_ || !_isReceiptsEgGrnEnabled_()) return;
+    PropertiesService.getDocumentProperties().setProperty(APP.INTERNAL.RECEIPTS_EG_INV_SYNC_FLAG, '1');
+  } catch (err) {
+    logError_('coco_flagReceiptsEgInventorySyncFromEdit_', err);
+  }
+}
+
 function coco_flagShipUaeEgInventorySyncFromEdit_(e) {
   try {
     if (!e || !e.range) return;
@@ -1646,12 +1728,23 @@ function coco_hasPendingShipUaeEgInventorySync_() {
   const cShipId = map[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID] || map['Shipment ID'];
   const cSku = map[APP.COLS.SHIP_UAE_EG.SKU] || map['SKU'];
   const cQty = map[APP.COLS.SHIP_UAE_EG.QTY] || map['Qty'];
+  const cQtyOutSynced = map[APP.COLS.SHIP_UAE_EG.QTY_OUT_SYNCED] || map['Qty Out Synced'];
   const cShipDate = map[APP.COLS.SHIP_UAE_EG.SHIP_DATE] || map['Ship Date'] || map['Ship Date (UAE)'];
   const cArrival = map[APP.COLS.SHIP_UAE_EG.ARRIVAL] || map['Actual Arrival'] || map['Actual Arrival (EG)'];
   const cWh = map[APP.COLS.SHIP_UAE_EG.WAREHOUSE_UAE] || map['Warehouse (UAE)'];
   const cSynced = map[APP.COLS.SHIP_UAE_EG.QTY_SYNCED] || map['Qty Synced'];
 
-  if (!cShipId || !cSku || !cQty || !cShipDate || !cArrival) return false;
+  const grnEnabled = (function () {
+    try {
+      const v = getSetting_(APP.SETTINGS_KEYS.ENABLE_RECEIPTS_EG_GRN_V1, 0);
+      const s = String(v || '').trim().toLowerCase();
+      return s === '1' || s === 'true' || s === 'yes';
+    } catch (e) { return false; }
+  })();
+
+  if (!cShipId || !cSku || !cQty || !cShipDate) return false;
+  if (!grnEnabled && !cArrival) return false;
+  if (!cSynced && !cQtyOutSynced) return false;
 
   const lr = sh.getLastRow();
   if (lr < 2) return false;
@@ -1661,8 +1754,9 @@ function coco_hasPendingShipUaeEgInventorySync_() {
   const skus = sh.getRange(2, cSku, n, 1).getValues();
   const qtys = sh.getRange(2, cQty, n, 1).getValues();
   const synceds = cSynced ? sh.getRange(2, cSynced, n, 1).getValues() : null;
+  const outSynceds = cQtyOutSynced ? sh.getRange(2, cQtyOutSynced, n, 1).getValues() : null;
   const shipDates = sh.getRange(2, cShipDate, n, 1).getValues();
-  const arrivals = sh.getRange(2, cArrival, n, 1).getValues();
+  const arrivals = cArrival ? sh.getRange(2, cArrival, n, 1).getValues() : null;
   const whs = cWh ? sh.getRange(2, cWh, n, 1).getValues() : null;
 
   const resolveStrictWh_ = function (val) {
@@ -1676,13 +1770,75 @@ function coco_hasPendingShipUaeEgInventorySync_() {
     const sid = String(shipIds[i][0] || '').trim();
     const sku = String(skus[i][0] || '').trim();
     const qty = Number(qtys[i][0] || 0);
-    const synced = synceds ? Number(synceds[i][0] || 0) : 0;
+    const syncedOut = outSynceds ? Number(outSynceds[i][0] || 0) : (synceds ? Number(synceds[i][0] || 0) : 0);
     const shipDateVal = shipDates ? shipDates[i][0] : '';
     const arrivalVal = arrivals ? arrivals[i][0] : '';
     const whVal = whs ? whs[i][0] : '';
     const whNorm = cWh ? resolveStrictWh_(whVal) : 'KOR'; // if no warehouse column, treat as OK
 
-    if (sid && sku && qty > synced && shipDateVal && arrivalVal && whNorm) return true;
+    if (grnEnabled) {
+      if (sid && sku && qty > syncedOut && shipDateVal && whNorm) return true;
+    } else {
+      if (sid && sku && qty > syncedOut && shipDateVal && arrivalVal && whNorm) return true;
+    }
+  }
+  return false;
+}
+
+function coco_hasPendingReceiptsEgInventorySync_() {
+  const flag = (function () {
+    try {
+      const v = getSetting_(APP.SETTINGS_KEYS.ENABLE_RECEIPTS_EG_GRN_V1, 0);
+      const s = String(v || '').trim().toLowerCase();
+      return s === '1' || s === 'true' || s === 'yes';
+    } catch (e) { return false; }
+  })();
+  if (!flag) return false;
+
+  let sh;
+  try { sh = getSheet_(APP.SHEETS.RECEIPTS_EG); } catch (err) {
+    const msg = String((err ? err.message : '') || '');
+    if (/sheet\s+.*not\s+found/i.test(msg)) return false;
+    throw err;
+  }
+  if (!sh) return false;
+
+  const map = getHeaderMap_(sh);
+  const cGrn = map[APP.COLS.RECEIPTS_EG.GRN_ID] || map['GRN ID'];
+  const cLine = map[APP.COLS.RECEIPTS_EG.GRN_LINE_ID] || map['GRN Line ID'];
+  const cDate = map[APP.COLS.RECEIPTS_EG.RECEIPT_DATE] || map['Receipt Date'];
+  const cWh = map[APP.COLS.RECEIPTS_EG.WAREHOUSE_EG] || map['Warehouse (EG)'];
+  const cSku = map[APP.COLS.RECEIPTS_EG.SKU] || map['SKU'];
+  const cQty = map[APP.COLS.RECEIPTS_EG.QTY_RECEIVED] || map['Qty Received'];
+  const cPosted = map[APP.COLS.RECEIPTS_EG.POSTED_TXN_ID] || map['Posted Txn ID'];
+  if (!cGrn || !cLine || !cDate || !cSku || !cQty) return false;
+
+  const lr = sh.getLastRow();
+  if (lr < 2) return false;
+
+  const n = lr - 1;
+  const grns = sh.getRange(2, cGrn, n, 1).getValues();
+  const lines = sh.getRange(2, cLine, n, 1).getValues();
+  const dates = sh.getRange(2, cDate, n, 1).getValues();
+  const whs = cWh ? sh.getRange(2, cWh, n, 1).getValues() : null;
+  const skus = sh.getRange(2, cSku, n, 1).getValues();
+  const qtys = sh.getRange(2, cQty, n, 1).getValues();
+  const posted = cPosted ? sh.getRange(2, cPosted, n, 1).getValues() : null;
+
+  for (let i = 0; i < n; i++) {
+    const grn = String(grns[i][0] || '').trim();
+    const line = String(lines[i][0] || '').trim();
+    const sku = String(skus[i][0] || '').trim();
+    const qty = Number(qtys[i][0] || 0);
+    const dt = dates[i][0];
+    const wh = whs ? normalizeWarehouseCode_(whs[i][0]) : (APP.WAREHOUSES.EG_TAN || 'EG-TAN');
+    const postedVal = posted ? String(posted[i][0] || '').trim() : '';
+
+    if (!grn || !line || !sku || qty <= 0) continue;
+    if (!(dt instanceof Date) || isNaN(dt.getTime())) continue;
+    if (wh !== 'EG-TAN') continue;
+    if (postedVal) continue;
+    return true;
   }
   return false;
 }
@@ -1701,8 +1857,9 @@ function coco_processSyncQueue() {
 
     const qcInvFlag0 = String(dp.getProperty(APP.INTERNAL.QC_INV_SYNC_FLAG) || '');
     const shipUaeEgInvFlag0 = String(dp.getProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG) || '');
+    const receiptsEgInvFlag0 = String(dp.getProperty(APP.INTERNAL.RECEIPTS_EG_INV_SYNC_FLAG) || '');
 
-    // Auto-detect pending Shipments_UAE_EG deltas (Qty > Qty Synced) so queue works even without onEdit.
+    // Auto-detect pending Shipments_UAE_EG deltas (Qty > Qty Synced/Out Synced) so queue works even without onEdit.
     let shipUaeEgInvFlag = shipUaeEgInvFlag0;
     if (shipUaeEgInvFlag !== '1') {
       try {
@@ -1715,8 +1872,20 @@ function coco_processSyncQueue() {
       }
     }
 
+    let receiptsEgInvFlag = receiptsEgInvFlag0;
+    if (receiptsEgInvFlag !== '1') {
+      try {
+        if (coco_hasPendingReceiptsEgInventorySync_()) {
+          dp.setProperty(APP.INTERNAL.RECEIPTS_EG_INV_SYNC_FLAG, '1');
+          receiptsEgInvFlag = '1';
+        }
+      } catch (e) {
+        logError_('coco_processSyncQueue:autoDetectReceiptsEg', e);
+      }
+    }
+
     // Early exit if nothing to do
-    if (!ordersForceAll && !ordersRaw && !qcForceAll && !qcRaw && shipFlag !== '1' && qcInvFlag0 !== '1' && shipUaeEgInvFlag !== '1') return;
+    if (!ordersForceAll && !ordersRaw && !qcForceAll && !qcRaw && shipFlag !== '1' && qcInvFlag0 !== '1' && shipUaeEgInvFlag !== '1' && receiptsEgInvFlag !== '1') return;
 
     const snapshot = {
       ordersForceAll: ordersForceAll ? '1' : '',
@@ -1790,10 +1959,12 @@ function coco_processSyncQueue() {
 
       const qcInvFlag = String(dp.getProperty(APP.INTERNAL.QC_INV_SYNC_FLAG) || '') === '1';
       const shipUaeEgInvFlag = String(dp.getProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG) || '') === '1';
+      const receiptsEgInvFlag = String(dp.getProperty(APP.INTERNAL.RECEIPTS_EG_INV_SYNC_FLAG) || '') === '1';
 
       // Clear flags early (debounce). If errors happen, we re-set them.
       if (qcInvFlag) dp.deleteProperty(APP.INTERNAL.QC_INV_SYNC_FLAG);
       if (shipUaeEgInvFlag) dp.deleteProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG);
+      if (receiptsEgInvFlag) dp.deleteProperty(APP.INTERNAL.RECEIPTS_EG_INV_SYNC_FLAG);
 
       if (qcInvFlag) {
         try {
@@ -1822,6 +1993,21 @@ function coco_processSyncQueue() {
           dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1'); // requeue
           dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_LAST_ERROR, String(err && err.message ? err.message : err));
           logError_('coco_processSyncQueue:SHIP_UAE_EG_INV', err);
+        }
+      }
+
+      if (receiptsEgInvFlag) {
+        try {
+          withLock_('RECEIPTS_EG_INV_SYNC', function () {
+            if (typeof syncReceiptsEgToInventory_EG !== 'function') throw new Error('syncReceiptsEgToInventory_EG is not defined');
+            syncReceiptsEgToInventory_EG();
+          });
+          dp.setProperty(APP.INTERNAL.RECEIPTS_EG_INV_LAST_RUN, new Date().toISOString());
+          dp.deleteProperty(APP.INTERNAL.RECEIPTS_EG_INV_LAST_ERROR);
+        } catch (err) {
+          dp.setProperty(APP.INTERNAL.RECEIPTS_EG_INV_SYNC_FLAG, '1'); // requeue
+          dp.setProperty(APP.INTERNAL.RECEIPTS_EG_INV_LAST_ERROR, String(err && err.message ? err.message : err));
+          logError_('coco_processSyncQueue:RECEIPTS_EG_INV', err);
         }
       }
 
