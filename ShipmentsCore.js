@@ -2175,6 +2175,12 @@ function syncQCtoInventory_UAE(opts) {
 
     const qcIdCol = qcMap[APP.COLS.QC_UAE.QC_ID] || qcMap['QC ID'];
     const qcDateCol = qcMap[APP.COLS.QC_UAE.QC_DATE] || qcMap['QC Date'];
+    const qcColPurchLineId =
+      (APP.COLS.QC_UAE && APP.COLS.QC_UAE.PURCHASE_LINE_ID ? qcMap[APP.COLS.QC_UAE.PURCHASE_LINE_ID] : null) ||
+      (APP.COLS.QC_UAE && APP.COLS.QC_UAE.PURCHASES_LINE_ID ? qcMap[APP.COLS.QC_UAE.PURCHASES_LINE_ID] : null) ||
+      qcMap['Purchases Line'] ||
+      qcMap['Purchases Line ID'] ||
+      qcMap['Purchases Line Id'];
 
     // ===== Build cost map from Purchases =====
     const purchLast = purchSh.getLastRow();
