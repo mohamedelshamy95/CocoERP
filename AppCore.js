@@ -204,6 +204,7 @@ const APP = {
       PRODUCT_NAME: 'Product Name',
       VARIANT: 'Variant / Color',
       QTY_RECEIVED: 'Qty Received',
+      QTY_SYNCED: 'Qty Synced',
       NOTES: 'Notes',
       POSTED_TXN_ID: 'Posted Txn ID',
       SYNC_STATUS: 'Sync Status',
@@ -1713,6 +1714,13 @@ function coco_flagShipUaeEgInventorySyncFromEdit_(e) {
 }
 
 function coco_hasPendingShipUaeEgInventorySync_() {
+  // If GRN receipts mode is ON, Shipments_UAE_EG should not drive inventory posting.
+  try {
+    const v = getSetting_(APP.SETTINGS_KEYS.ENABLE_RECEIPTS_EG_GRN_V1, 0);
+    const s = String(v || '').trim().toLowerCase();
+    if (s === '1' || s === 'true' || s === 'yes') return false;
+  } catch (e) { }
+
   let sh;
   try {
     sh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
@@ -1824,6 +1832,8 @@ function coco_hasPendingReceiptsEgInventorySync_() {
   const skus = sh.getRange(2, cSku, n, 1).getValues();
   const qtys = sh.getRange(2, cQty, n, 1).getValues();
   const posted = cPosted ? sh.getRange(2, cPosted, n, 1).getValues() : null;
+  const qtySyncedCol = map[APP.COLS.RECEIPTS_EG.QTY_SYNCED] || map['Qty Synced'];
+  const qtySynced = qtySyncedCol ? sh.getRange(2, qtySyncedCol, n, 1).getValues() : null;
 
   for (let i = 0; i < n; i++) {
     const grn = String(grns[i][0] || '').trim();
@@ -1833,11 +1843,12 @@ function coco_hasPendingReceiptsEgInventorySync_() {
     const dt = dates[i][0];
     const wh = whs ? normalizeWarehouseCode_(whs[i][0]) : (APP.WAREHOUSES.EG_TAN || 'EG-TAN');
     const postedVal = posted ? String(posted[i][0] || '').trim() : '';
+    const syncedVal = qtySynced ? Number(qtySynced[i][0] || 0) : 0;
 
-    if (!grn || !line || !sku || qty <= 0) continue;
+    if (!grn || !line || !sku || qty <= syncedVal) continue;
     if (!(dt instanceof Date) || isNaN(dt.getTime())) continue;
     if (wh !== 'EG-TAN') continue;
-    if (postedVal) continue;
+    if (postedVal) continue; // legacy marker; delta-based detector prefers qty delta
     return true;
   }
   return false;
@@ -1861,9 +1872,17 @@ function coco_processSyncQueue() {
 
     // Auto-detect pending Shipments_UAE_EG deltas (Qty > Qty Synced/Out Synced) so queue works even without onEdit.
     let shipUaeEgInvFlag = shipUaeEgInvFlag0;
+    const grnEnabled = (function () {
+      try {
+        const v = getSetting_(APP.SETTINGS_KEYS.ENABLE_RECEIPTS_EG_GRN_V1, 0);
+        const s = String(v || '').trim().toLowerCase();
+        return s === '1' || s === 'true' || s === 'yes';
+      } catch (e) { return false; }
+    })();
+
     if (shipUaeEgInvFlag !== '1') {
       try {
-        if (coco_hasPendingShipUaeEgInventorySync_()) {
+        if (!grnEnabled && coco_hasPendingShipUaeEgInventorySync_()) {
           dp.setProperty(APP.INTERNAL.SHIP_UAE_EG_INV_SYNC_FLAG, '1');
           shipUaeEgInvFlag = '1';
         }

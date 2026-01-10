@@ -1874,53 +1874,17 @@ function qc_generateFromPurchases_(optOrderIdOrOrderIds) {
       });
     }
 
-    // 2) Insert at TOP without breaking ARRAYFORMULA anchors (shift non-formula columns only)
+    // 2) Append new rows at the bottom (no top insert); then sort for UX.
     if (newRowsFull.length) {
-      const insertCount = newRowsFull.length;
-
-      const shiftCols = [];
-      for (let c = 1; c <= qcLastCol; c++) {
-        if (!formulasRow2[c - 1]) shiftCols.push(c);
-      }
-
-      const segments = [];
-      if (shiftCols.length) {
-        let start = shiftCols[0];
-        let prev = start;
-        for (let i = 1; i < shiftCols.length; i++) {
-          const cur = shiftCols[i];
-          if (cur === prev + 1) {
-            prev = cur;
-            continue;
-          }
-          segments.push({ startCol: start, numCols: (prev - start + 1) });
-          start = cur;
-          prev = cur;
-        }
-        segments.push({ startCol: start, numCols: (prev - start + 1) });
-      }
-
-      const targetLastRow = 1 + existingN + insertCount;
+      const startRow = qcSh.getLastRow() + 1;
+      const targetLastRow = startRow + newRowsFull.length - 1;
       if (qcSh.getMaxRows() < targetLastRow) {
         qcSh.insertRowsAfter(qcSh.getMaxRows(), targetLastRow - qcSh.getMaxRows());
       }
-
-      segments.forEach(function (seg) {
-        const startCol = seg.startCol;
-        const numCols = seg.numCols;
-
-        const existingSeg = existingN
-          ? qcSh.getRange(2, startCol, existingN, numCols).getValues()
-          : [];
-
-        const out = [];
-        for (let i = 0; i < insertCount; i++) {
-          out.push(newRowsFull[i].slice(startCol - 1, startCol - 1 + numCols));
-        }
-        for (let i = 0; i < existingSeg.length; i++) out.push(existingSeg[i]);
-
-        qcSh.getRange(2, startCol, out.length, numCols).setValues(out);
-      });
+      qcSh.getRange(startRow, 1, newRowsFull.length, qcLastCol).setValues(newRowsFull);
+      try {
+        qc_sortQCUaeByDate_();
+      } catch (e) { }
     }
 
     // Optional: recalc derived columns only if NOT formula-driven at row2
@@ -1990,6 +1954,68 @@ function qc_recalcQuantitiesAndResult(opts) {
     safeAlert_('QC_UAE recalculation done.\nUpdated rows: ' + res.updated);
   }
   return res;
+}
+
+/**
+ * Sort QC_UAE rows by QC Date ascending (blanks last), then by QC ID (or Purchases Line ID if QC ID blank).
+ * Intended for manual/batch actions (not for onEdit).
+ */
+function qc_sortQCUaeByDate_() {
+  try {
+    const qcSh = getSheet_(APP.SHEETS.QC_UAE);
+    const qcMap = getHeaderMap_(qcSh);
+
+    const colDate = qcMap[APP.COLS.QC_UAE.QC_DATE] || qcMap['QC Date'];
+    const colId = qcMap[APP.COLS.QC_UAE.QC_ID] || qcMap['QC ID'];
+    const colLine = qcMap[APP.COLS.QC_UAE.PURCHASE_LINE_ID] || qcMap['Purchases Line'] || qcMap['Purchases Line ID'] || qcMap['Purchases Line Id'];
+    if (!colDate) return;
+
+    const lastRow = qcSh.getLastRow();
+    if (lastRow < 3) return; // nothing to sort
+
+    const lastCol = qcSh.getLastColumn();
+    const numRows = lastRow - 1;
+    const data = qcSh.getRange(2, 1, numRows, lastCol).getValues();
+
+    const idxDate = colDate - 1;
+    const idxId = colId ? colId - 1 : null;
+    const idxLine = colLine ? colLine - 1 : null;
+
+    data.sort(function (a, b) {
+      const ad = a[idxDate];
+      const bd = b[idxDate];
+      const aHasDate = ad instanceof Date && !isNaN(ad.getTime());
+      const bHasDate = bd instanceof Date && !isNaN(bd.getTime());
+      if (aHasDate && bHasDate) {
+        if (ad.getTime() !== bd.getTime()) return ad - bd;
+      } else if (aHasDate && !bHasDate) {
+        return -1; // dates first
+      } else if (!aHasDate && bHasDate) {
+        return 1;
+      }
+      const aKey = idxId != null ? String(a[idxId] || '') : '';
+      const bKey = idxId != null ? String(b[idxId] || '') : '';
+      if (aKey || bKey) {
+        if (aKey && bKey) {
+          if (aKey < bKey) return -1;
+          if (aKey > bKey) return 1;
+        } else if (aKey && !bKey) {
+          return -1;
+        } else if (!aKey && bKey) {
+          return 1;
+        }
+      }
+      const aLine = idxLine != null ? String(a[idxLine] || '') : '';
+      const bLine = idxLine != null ? String(b[idxLine] || '') : '';
+      if (aLine < bLine) return -1;
+      if (aLine > bLine) return 1;
+      return 0;
+    });
+
+    qcSh.getRange(2, 1, numRows, lastCol).setValues(data);
+  } catch (e) {
+    logError_('qc_sortQCUaeByDate_', e);
+  }
 }
 
 /**
@@ -2471,6 +2497,492 @@ function syncQCtoInventory_UAE(opts) {
   }
 }
 
+/* ===================================================================
+ * Receipts_EG (GRN) → Inventory + Shipments reconciliation
+ * =================================================================== */
+
+function _isReceiptsEgGrnEnabled_() {
+  const v = getSetting_(APP.SETTINGS_KEYS.ENABLE_RECEIPTS_EG_GRN_V1, 0);
+  const s = String(v || '').trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes';
+}
+
+function receiptsEgEnsureSchema_(opts) {
+  const status = {
+    createdSheet: false,
+    wroteHeaders: false,
+    insertedHeaderRow: false,
+    appendedCols: [],
+    sheetName: ''
+  };
+  try {
+    const ss = getSpreadsheet_();
+    let sh = ss.getSheetByName(APP.SHEETS.RECEIPTS_EG);
+    if (!sh) {
+      sh = ss.insertSheet(APP.SHEETS.RECEIPTS_EG);
+      status.createdSheet = true;
+    }
+    status.sheetName = sh.getName();
+
+    const requiredHeaders = [
+      'GRN ID',
+      'GRN Line ID',
+      'GRN Date',
+      'Warehouse (UAE)',
+      'SKU',
+      'Product Name',
+      'Variant / Color',
+      'Qty Received',
+      'Qty Synced',
+      'Notes',
+      // optional but referenced
+      'Shipment ID',
+      'Shipment Line ID',
+      'Sync Status',
+      'Last Synced At',
+      'Posted Txn ID'
+    ];
+
+    const lastCol = Math.max(1, sh.getLastColumn());
+    const headerRow = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+    const isBlankHeaderRow = headerRow.every(function (c) { return !String(c || '').trim(); });
+
+    const map = getHeaderMap_(sh, 1) || {};
+    const hasAnyHeader = Object.keys(map).length > 0;
+
+    if (isBlankHeaderRow && !hasAnyHeader) {
+      sh.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+      status.wroteHeaders = true;
+    } else if (!hasAnyHeader) {
+      sh.insertRowsBefore(1, 1);
+      sh.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+      status.wroteHeaders = true;
+      status.insertedHeaderRow = true;
+    } else {
+      requiredHeaders.forEach(function (h) {
+        if (!map[h]) {
+          sh.getRange(1, sh.getLastColumn() + 1).setValue(h);
+          status.appendedCols.push(h);
+        }
+      });
+      if (status.appendedCols.length) status.wroteHeaders = true;
+    }
+
+    // Light formatting + filters (safe)
+    const hdrRange = sh.getRange(1, 1, 1, sh.getLastColumn());
+    hdrRange.setFontWeight('bold');
+    hdrRange.setWrap(true);
+    try { sh.setFrozenRows(1); } catch (e) { }
+    try {
+      const filter = sh.getFilter();
+      if (filter) filter.remove();
+      hdrRange.createFilter();
+    } catch (e) { }
+
+    // Date/number formats
+    try {
+      const refreshedMap = getHeaderMap_(sh, 1) || {};
+      const colDate = refreshedMap['GRN Date'] || refreshedMap['Receipt Date'];
+      if (colDate) sh.getRange(2, colDate, Math.max(0, sh.getMaxRows() - 1), 1).setNumberFormat('yyyy-mm-dd');
+
+      const qtyCols = [];
+      if (refreshedMap['Qty Received']) qtyCols.push(refreshedMap['Qty Received']);
+      if (refreshedMap['Qty Synced']) qtyCols.push(refreshedMap['Qty Synced']);
+      qtyCols.forEach(function (c) {
+        sh.getRange(2, c, Math.max(0, sh.getMaxRows() - 1), 1).setNumberFormat('0.00');
+      });
+
+      const colWhUae = refreshedMap['Warehouse (UAE)'];
+      if (colWhUae) {
+        const rule = SpreadsheetApp.newDataValidation()
+          .requireValueInList(['KOR', 'ATTIA'], true)
+          .setAllowInvalid(false)
+          .build();
+        sh.getRange(2, colWhUae, Math.max(0, sh.getMaxRows() - 1), 1).setDataValidation(rule);
+      }
+    } catch (e) { }
+  } catch (err) {
+    try {
+      const dp = PropertiesService.getDocumentProperties();
+      const key = 'CocoERP_RL_receiptsEgEnsureSchema_v1';
+      const last = Number(dp.getProperty(key) || 0);
+      const now = Date.now();
+      const windowMs = 6 * 60 * 60 * 1000;
+      if (!last || (now - last) > windowMs) {
+        logError_('receiptsEgEnsureSchema_', err);
+        dp.setProperty(key, String(now));
+      }
+    } catch (e2) { }
+  }
+  return status;
+}
+
+function ensureReceiptsEgSheet_() {
+  receiptsEgEnsureSchema_();
+  return getSheet_(APP.SHEETS.RECEIPTS_EG);
+}
+
+function receiptsEgOnEdit_(e) {
+  try {
+    if (!e || !e.range) return;
+    const sh = e.range.getSheet();
+    if (!sh || (sh.getName() !== APP.SHEETS.RECEIPTS_EG && sh.getName() !== 'Receipts_EG')) return;
+
+    receiptsEgEnsureSchema_();
+
+    const map = getHeaderMap_(sh);
+    const colGrnId = map[APP.COLS.RECEIPTS_EG.GRN_ID] || map['GRN ID'];
+    const colLineId = map[APP.COLS.RECEIPTS_EG.GRN_LINE_ID] || map['GRN Line ID'];
+    const colDate = map[APP.COLS.RECEIPTS_EG.RECEIPT_DATE] || map['Receipt Date'] || map['GRN Date'];
+    const colWhEg = map[APP.COLS.RECEIPTS_EG.WAREHOUSE_EG] || map['Warehouse (EG)'];
+    if (!colGrnId && !colLineId && !colDate && !colWhEg) return; // layout incomplete
+
+    const row = e.range.getRow();
+    if (row === 1) return;
+
+    const values = sh.getRange(row, 1, 1, sh.getLastColumn()).getValues()[0];
+
+    // Auto GRN ID (stable per row; do not overwrite)
+    if (colGrnId && !values[colGrnId - 1]) {
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = ('0' + (today.getMonth() + 1)).slice(-2);
+      const d = ('0' + today.getDate()).slice(-2);
+      const key = 'CocoERP_GRN_SEQ_' + y + m + d;
+      const dp = PropertiesService.getDocumentProperties();
+      let seq = Number(dp.getProperty(key) || 0) || 0;
+      seq += 1;
+      dp.setProperty(key, String(seq));
+      const grnId = 'GRN-' + y + m + d + '-' + ('0000' + seq).slice(-4);
+      values[colGrnId - 1] = grnId;
+    }
+
+    // Auto GRN Line ID (stable UUID; do not overwrite)
+    if (colLineId && !values[colLineId - 1]) {
+      values[colLineId - 1] = Utilities.getUuid();
+    }
+
+    // Default Receipt Date = today (only when blank)
+    if (colDate && !values[colDate - 1]) {
+      values[colDate - 1] = new Date();
+    }
+
+    // Default Warehouse (EG) = TAN-GH / EG-TAN
+    if (colWhEg && !values[colWhEg - 1]) {
+      values[colWhEg - 1] = APP.WAREHOUSES.EG_TAN || 'EG-TAN';
+    }
+
+    sh.getRange(row, 1, 1, sh.getLastColumn()).setValues([values]);
+  } catch (err) {
+    logError_('receiptsEgOnEdit_', err, { a1: e && e.range ? e.range.getA1Notation() : '' });
+  }
+}
+
+function syncReceiptsEgToInventory_EG(opts) {
+  const interactive = !!(opts && opts.interactive);
+  try {
+    if (!_isReceiptsEgGrnEnabled_()) return;
+    receiptsEgEnsureSchema_();
+
+    const sh = ensureReceiptsEgSheet_();
+    const ledgerSh = getSheet_(APP.SHEETS.INVENTORY_TXNS);
+    const shipSh = getSheet_(APP.SHEETS.SHIP_UAE_EG);
+
+    const map = getHeaderMap_(sh);
+    const ledgerMap = getHeaderMap_(ledgerSh);
+    const shipMap = getHeaderMap_(shipSh);
+
+    const colGrnId = map[APP.COLS.RECEIPTS_EG.GRN_ID] || map['GRN ID'];
+    const colLineId = map[APP.COLS.RECEIPTS_EG.GRN_LINE_ID] || map['GRN Line ID'];
+    const colDate = map[APP.COLS.RECEIPTS_EG.RECEIPT_DATE] || map['Receipt Date'] || map['GRN Date'];
+    const colWhEg = map[APP.COLS.RECEIPTS_EG.WAREHOUSE_EG] || map['Warehouse (EG)'];
+    const colWhUae = map[APP.COLS.RECEIPTS_EG.WAREHOUSE_UAE] || map['Warehouse (UAE)'];
+    const colShipmentId = map[APP.COLS.RECEIPTS_EG.SHIPMENT_ID] || map['Shipment ID'];
+    const colShipmentLineId = map[APP.COLS.RECEIPTS_EG.SHIPMENT_LINE_ID] || map['Shipments Line ID'];
+    const colSku = map[APP.COLS.RECEIPTS_EG.SKU] || map['SKU'];
+    const colProduct = map[APP.COLS.RECEIPTS_EG.PRODUCT_NAME] || map['Product Name'];
+    const colVariant = map[APP.COLS.RECEIPTS_EG.VARIANT] || map['Variant / Color'];
+    const colQty = map[APP.COLS.RECEIPTS_EG.QTY_RECEIVED] || map['Qty Received'];
+    const colQtySynced = map[APP.COLS.RECEIPTS_EG.QTY_SYNCED] || map['Qty Synced'];
+    const colNotes = map[APP.COLS.RECEIPTS_EG.NOTES] || map['Notes'];
+    const colPostedTxn = map[APP.COLS.RECEIPTS_EG.POSTED_TXN_ID] || map['Posted Txn ID'];
+    const colSyncStatus = map[APP.COLS.RECEIPTS_EG.SYNC_STATUS] || map['Sync Status'];
+    const colLastSynced = map[APP.COLS.RECEIPTS_EG.LAST_SYNCED_AT] || map['Last Synced At'];
+
+    if (!colGrnId || !colLineId || !colDate || !colSku || !colQty) {
+      logError_('syncReceiptsEgToInventory_EG', new Error('Receipts_EG missing required headers.'));
+      return;
+    }
+
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return;
+
+    const data = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues();
+
+    // Ledger existing source IDs for GRN_EG
+    const idxSrcType = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_TYPE] || ledgerMap['Source Type'] || 0) - 1;
+    const idxSrcId = (ledgerMap[APP.COLS.INV_TXNS.SOURCE_ID] || ledgerMap['Source ID'] || 0) - 1;
+    const existingSourceIds = new Set();
+    if (idxSrcType >= 0 && idxSrcId >= 0) {
+      const lr = ledgerSh.getLastRow();
+      if (lr >= 2) {
+        const vals = ledgerSh.getRange(2, 1, lr - 1, ledgerSh.getLastColumn()).getValues();
+        vals.forEach(function (r) {
+          if (String(r[idxSrcType] || '').trim() !== 'GRN_EG') return;
+          const sid = String(r[idxSrcId] || '').trim();
+          if (sid) existingSourceIds.add(sid);
+        });
+      }
+    }
+
+    // UAE basis for cost
+    const uaeBasis = _sueg_buildUaeBasisFromLedger_(ledgerSh, ledgerMap);
+
+    // Shipments index for allocation
+    const shipIdx = {
+      lineId: shipMap[APP.COLS.SHIP_UAE_EG.LINE_ID] || shipMap['Line ID'],
+      shipmentId: shipMap[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID] || shipMap['Shipment ID'],
+      sku: shipMap[APP.COLS.SHIP_UAE_EG.SKU] || shipMap['SKU'],
+      variant: shipMap[APP.COLS.SHIP_UAE_EG.VARIANT] || shipMap['Variant / Color'],
+      qty: shipMap[APP.COLS.SHIP_UAE_EG.QTY] || shipMap['Qty'],
+      qtySynced: shipMap[APP.COLS.SHIP_UAE_EG.QTY_SYNCED] || shipMap['Qty Synced'],
+      status: shipMap[APP.COLS.SHIP_UAE_EG.STATUS] || shipMap['Status']
+    };
+    const shipData = (shipSh.getLastRow() >= 2)
+      ? shipSh.getRange(2, 1, shipSh.getLastRow() - 1, shipSh.getLastColumn()).getValues()
+      : [];
+
+    const lineMap = {};
+    shipData.forEach(function (r, idx) {
+      const lid = shipIdx.lineId ? String(r[shipIdx.lineId - 1] || '').trim() : '';
+      const sid = shipIdx.shipmentId ? String(r[shipIdx.shipmentId - 1] || '').trim() : '';
+      const sku = shipIdx.sku ? String(r[shipIdx.sku - 1] || '').trim() : '';
+      const variant = shipIdx.variant ? String(r[shipIdx.variant - 1] || '').trim().toUpperCase() : '';
+      const key = lid || (sid && sku ? (sid + '||' + sku + '||' + variant) : '');
+      if (key && !lineMap[key]) lineMap[key] = idx;
+    });
+
+    const addTag_ = function (rowArr, idx, tag) {
+      if (idx == null) return;
+      rowArr[idx] = _noteAddTokenSafe_(String(rowArr[idx] || ''), tag);
+    };
+    const removeTag_ = function (rowArr, idx, tag) {
+      if (idx == null) return;
+      rowArr[idx] = _noteRemoveTokenSafe_(String(rowArr[idx] || ''), tag);
+    };
+
+    const TAG_NO_ID = 'GRN_SYNC_SKIPPED_NO_ID_V1';
+    const TAG_NO_LINE = 'GRN_SYNC_SKIPPED_NO_LINEID_V1';
+    const TAG_NO_DATE = 'GRN_SYNC_SKIPPED_NO_DATE_V1';
+    const TAG_NO_SKU = 'GRN_SYNC_SKIPPED_NO_SKU_V1';
+    const TAG_NO_QTY = 'GRN_SYNC_SKIPPED_NO_QTY_V1';
+    const TAG_BAD_WH = 'GRN_SYNC_SKIPPED_BAD_WAREHOUSE_V1';
+    const TAG_BAD_UAE_WH = 'GRN_SYNC_SKIPPED_NO_UAE_WAREHOUSE_V1';
+    const TAG_NO_COST = 'GRN_SYNC_SKIPPED_NO_COST_V1';
+
+    const txns = [];
+    let posted = 0;
+    let skipped = 0;
+
+    data.forEach(function (row, idx) {
+      const sheetRow = idx + 2;
+      const notesIdx = colNotes ? colNotes - 1 : null;
+
+      const grnId = colGrnId ? String(row[colGrnId - 1] || '').trim() : '';
+      const grnLineId = colLineId ? String(row[colLineId - 1] || '').trim() : '';
+      const sku = colSku ? String(row[colSku - 1] || '').trim() : '';
+      const variantRaw = colVariant ? String(row[colVariant - 1] || '').trim() : '';
+      const variantKey = variantRaw.toUpperCase();
+      const qtyVal = colQty ? Number(row[colQty - 1] || 0) : 0;
+      const qtySyncedVal = colQtySynced ? Number(row[colQtySynced - 1] || 0) : 0;
+      const whEgRaw = colWhEg ? row[colWhEg - 1] : '';
+      const whEg = normalizeWarehouseCode_(whEgRaw);
+      const whUaeRaw = colWhUae ? row[colWhUae - 1] : '';
+      const whUae = resolveUaeWarehouseStrict_(whUaeRaw, '');
+      const receiptDate = colDate ? row[colDate - 1] : null;
+      const receiptDateValid = (receiptDate instanceof Date && !isNaN(receiptDate.getTime())) ? receiptDate : null;
+      const shipmentIdVal = colShipmentId ? String(row[colShipmentId - 1] || '').trim() : '';
+      const shipmentLineIdVal = colShipmentLineId ? String(row[colShipmentLineId - 1] || '').trim() : '';
+      const productName = colProduct ? row[colProduct - 1] : '';
+
+      // Reset tags when valid
+      if (grnId) removeTag_(row, notesIdx, TAG_NO_ID); else addTag_(row, notesIdx, TAG_NO_ID);
+      if (grnLineId) removeTag_(row, notesIdx, TAG_NO_LINE); else addTag_(row, notesIdx, TAG_NO_LINE);
+      if (receiptDateValid) removeTag_(row, notesIdx, TAG_NO_DATE); else addTag_(row, notesIdx, TAG_NO_DATE);
+      if (sku) removeTag_(row, notesIdx, TAG_NO_SKU); else addTag_(row, notesIdx, TAG_NO_SKU);
+      if (qtyVal > 0) removeTag_(row, notesIdx, TAG_NO_QTY); else addTag_(row, notesIdx, TAG_NO_QTY);
+      if (whEg === 'EG-TAN' || whEg === APP.WAREHOUSES.EG_TAN) removeTag_(row, notesIdx, TAG_BAD_WH); else addTag_(row, notesIdx, TAG_BAD_WH);
+      if (whUae === 'KOR' || whUae === 'ATTIA') removeTag_(row, notesIdx, TAG_BAD_UAE_WH); else addTag_(row, notesIdx, TAG_BAD_UAE_WH);
+
+      if (!grnId || !grnLineId || !receiptDateValid || !sku || qtyVal <= 0 || (whEg !== 'EG-TAN' && whEg !== APP.WAREHOUSES.EG_TAN) || !(whUae === 'KOR' || whUae === 'ATTIA')) {
+        skipped++;
+        data[idx] = row;
+        return;
+      }
+
+      const delta = qtyVal - qtySyncedVal;
+      if (delta < 0) {
+        addTag_(row, notesIdx, 'GRN_NEEDS_REVERSAL_V1');
+        skipped++;
+        data[idx] = row;
+        return;
+      } else {
+        removeTag_(row, notesIdx, 'GRN_NEEDS_REVERSAL_V1');
+      }
+      if (delta === 0) {
+        data[idx] = row;
+        return;
+      }
+
+      const sourceIdOut = ['GRN', grnId, grnLineId, 'OUT'].join('|');
+      const sourceIdIn = ['GRN', grnId, grnLineId, 'IN'].join('|');
+      if (existingSourceIds.has(sourceIdOut) || existingSourceIds.has(sourceIdIn)) {
+        skipped++;
+        return;
+      }
+
+      const basisKey = sku + '||' + (whUae || '');
+      const basis = whUae ? uaeBasis[basisKey] : null;
+      if (!basis || !basis.qty || basis.qty <= 0) {
+        addTag_(row, notesIdx, TAG_NO_COST);
+        skipped++;
+        data[idx] = row;
+        return;
+      } else {
+        removeTag_(row, notesIdx, TAG_NO_COST);
+      }
+
+      const unitCost = Number(basis.avgCost || 0);
+      const toWarehouse = APP.WAREHOUSES.EG_TAN || 'EG-TAN';
+      const notesText = [
+        'GRN', grnId,
+        (shipmentIdVal ? ('Shipment ' + shipmentIdVal) : ''),
+        (shipmentLineIdVal ? ('Line ' + shipmentLineIdVal) : '')
+      ].filter(Boolean).join(' | ');
+
+      const makeTxnId_ = function (base) {
+        if (typeof _inv_makeTxnId_ === 'function') return _inv_makeTxnId_(base);
+        return '';
+      };
+
+      txns.push({
+        txnId: makeTxnId_({
+          type: 'OUT',
+          sourceType: 'GRN_EG',
+          sourceId: sourceIdOut,
+          batchCode: '',
+          sku: sku,
+          warehouse: whUae,
+          qtyIn: 0,
+          qtyOut: delta,
+          unitCostEgp: unitCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: receiptDateValid
+        }) || undefined,
+        type: 'OUT',
+        sourceType: 'GRN_EG',
+        sourceId: sourceIdOut,
+        batchCode: '',
+        sku: sku,
+        productName: productName || '',
+        variant: variantRaw || '',
+        warehouse: whUae,
+        qty: delta,
+        unitCostEgp: unitCost,
+        currency: 'EGP',
+        txnDate: receiptDateValid,
+        notes: notesText
+      });
+
+      txns.push({
+        txnId: makeTxnId_({
+          type: 'IN',
+          sourceType: 'GRN_EG',
+          sourceId: sourceIdIn,
+          batchCode: '',
+          sku: sku,
+          warehouse: toWarehouse,
+          qtyIn: delta,
+          qtyOut: 0,
+          unitCostEgp: unitCost,
+          currency: 'EGP',
+          unitPriceOrig: 0,
+          txnDate: receiptDateValid
+        }) || undefined,
+        type: 'IN',
+        sourceType: 'GRN_EG',
+        sourceId: sourceIdIn,
+        batchCode: '',
+        sku: sku,
+        productName: productName || '',
+        variant: variantRaw || '',
+        warehouse: toWarehouse,
+        qty: delta,
+        unitCostEgp: unitCost,
+        currency: 'EGP',
+        txnDate: receiptDateValid,
+        notes: notesText
+      });
+
+      existingSourceIds.add(sourceIdOut);
+      existingSourceIds.add(sourceIdIn);
+      posted++;
+
+      if (colQtySynced) row[colQtySynced - 1] = qtySyncedVal + delta;
+
+      // Allocation back to Shipments_UAE_EG (update Qty Synced)
+      const allocKey = shipmentLineIdVal || (shipmentIdVal && sku ? (shipmentIdVal + '||' + sku + '||' + variantKey) : '');
+      const shipIdxRow = allocKey ? lineMap[allocKey] : undefined;
+      if (shipIdxRow !== undefined) {
+        const shipRow = shipData[shipIdxRow];
+        const qtyCol = shipIdx.qty ? shipIdx.qty - 1 : null;
+        const syncedCol = shipIdx.qtySynced ? shipIdx.qtySynced - 1 : null;
+        const statusCol = shipIdx.status ? shipIdx.status - 1 : null;
+        if (syncedCol != null) {
+          const curSynced = Number(shipRow[syncedCol] || 0);
+          const planned = qtyCol != null ? Number(shipRow[qtyCol] || 0) : 0;
+          const newSynced = curSynced + qtyVal;
+          shipRow[syncedCol] = planned ? Math.min(planned, newSynced) : newSynced;
+          if (statusCol != null && shipRow[syncedCol] >= planned && planned > 0) {
+            shipRow[statusCol] = SHIPMENT_STATUS.ARRIVED_EG;
+          }
+          shipData[shipIdxRow] = shipRow;
+        }
+      }
+
+      // Mark receipts row as posted
+      if (colPostedTxn) row[colPostedTxn - 1] = sourceIdIn;
+      if (colSyncStatus) row[colSyncStatus - 1] = 'POSTED';
+      if (colLastSynced) row[colLastSynced - 1] = new Date();
+      data[idx] = row;
+    });
+
+    if (txns.length) {
+      if (typeof logInventoryTxnBatch_ === 'function') {
+        logInventoryTxnBatch_(txns);
+      } else {
+        txns.forEach(function (t) { logInventoryTxn_(t); });
+      }
+    }
+
+    if (posted > 0 && shipData.length) {
+      shipSh.getRange(2, 1, shipData.length, shipSh.getLastColumn()).setValues(shipData);
+    }
+    if (data.length) {
+      sh.getRange(2, 1, data.length, sh.getLastColumn()).setValues(data);
+    }
+
+    if (posted > 0 && typeof inv_rebuildAllSnapshots === 'function') inv_rebuildAllSnapshots();
+    if (interactive && typeof safeAlert_ === 'function') {
+      safeAlert_('Receipts_EG sync done.\nPosted: ' + posted + '\nSkipped: ' + skipped);
+    }
+  } catch (err) {
+    logError_('syncReceiptsEgToInventory_EG', err);
+    throw err;
+  }
+}
+
 /**
  * Sync Shipments_UAE_EG → Inventory_Transactions + snapshots
  *
@@ -2507,6 +3019,7 @@ function syncShipmentsUaeEgToInventory() {
       const shipMap = getHeaderMap_(shipSh);
       const invUaeMap = getHeaderMap_(invUaeSh);
       const ledgerMap = getHeaderMap_(ledgerSh);
+      const useGrnReceipts = _isReceiptsEgGrnEnabled_();
 
       const lastShipRow = shipSh.getLastRow();
       if (lastShipRow < 2) {
@@ -2520,14 +3033,15 @@ function syncShipmentsUaeEgToInventory() {
       const colShipmentId = shipMap[APP.COLS.SHIP_UAE_EG.SHIPMENT_ID] || shipMap['Shipment ID'];
       const colSku = shipMap[APP.COLS.SHIP_UAE_EG.SKU] || shipMap['SKU'];
       const colQty = shipMap[APP.COLS.SHIP_UAE_EG.QTY] || shipMap['Qty'];
+      const colQtyOutSynced = shipMap[APP.COLS.SHIP_UAE_EG.QTY_OUT_SYNCED] || shipMap['Qty Out Synced'];
       const colShipDate = shipMap[APP.COLS.SHIP_UAE_EG.SHIP_DATE] || shipMap['Ship Date'] || shipMap['Ship Date (UAE)'];
       const colArrival = shipMap[APP.COLS.SHIP_UAE_EG.ARRIVAL] || shipMap['Actual Arrival'] || shipMap['Actual Arrival (EG)'];
       const colQtySynced = shipMap[APP.COLS.SHIP_UAE_EG.QTY_SYNCED] || shipMap['Qty Synced'];
 
-      if (!colShipmentId || !colSku || !colQty || !colShipDate || !colQtySynced || !colArrival) {
+      if (!colShipmentId || !colSku || !colQty || !colShipDate || (!useGrnReceipts && !colArrival) || (!colQtySynced && !colQtyOutSynced)) {
         logError_(
           'syncShipmentsUaeEgToInventory',
-          new Error('Missing required headers in Shipments_UAE_EG (Shipment ID / SKU / Qty / Ship Date / Actual Arrival / Qty Synced).')
+          new Error('Missing required headers in Shipments_UAE_EG (Shipment ID / SKU / Qty / Ship Date / Qty Synced / Arrival).')
         );
         return;
       }
@@ -2536,8 +3050,14 @@ function syncShipmentsUaeEgToInventory() {
       const idxShipSku = colSku - 1;
       const idxShipQty = colQty - 1;
       const idxShipShipDate = colShipDate - 1;
-      const idxShipArrival = colArrival - 1;
-      const idxShipQtySynced = colQtySynced - 1;
+      const idxShipArrival = colArrival ? (colArrival - 1) : null;
+      const idxShipQtyOutSynced = colQtyOutSynced ? (colQtyOutSynced - 1) : null;
+      const idxShipQtySynced = colQtySynced ? (colQtySynced - 1) : null;
+
+      if (useGrnReceipts && idxShipQtyOutSynced == null) {
+        logError_('syncShipmentsUaeEgToInventory', new Error('Feature flag ENABLE_RECEIPTS_EG_GRN_V1 is ON but Qty Out Synced column is missing in Shipments_UAE_EG.'));
+        return;
+      }
 
       // ===== Cost columns (per agreed policy) =====
       const colShipCost =
@@ -2572,6 +3092,34 @@ function syncShipmentsUaeEgToInventory() {
       const idxShipWhUae = colShipWhUae ? colShipWhUae - 1 : null;
       const colShipNotes = shipMap[APP.COLS.SHIP_UAE_EG.NOTES] || shipMap['Notes'] || shipMap['Shipment Notes'] || null;
       const idxShipNotes = colShipNotes ? colShipNotes - 1 : null;
+
+      if (useGrnReceipts) {
+        const waitingTag = 'WAITING_FOR_GRN_V1';
+        shipData.forEach(function (row) {
+          const qtyOriginal = Number(row[idxShipQty] || 0);
+          const qtySyncedOut = (idxShipQtyOutSynced != null)
+            ? Number(row[idxShipQtyOutSynced] || 0)
+            : (idxShipQtySynced != null ? Number(row[idxShipQtySynced] || 0) : 0);
+          const delta = qtyOriginal - qtySyncedOut;
+          if (idxShipNotes != null) {
+            if (delta > 0) {
+              row[idxShipNotes] = _noteAddTokenSafe_(String(row[idxShipNotes] || ''), waitingTag);
+            } else {
+              row[idxShipNotes] = _noteRemoveTokenSafe_(String(row[idxShipNotes] || ''), waitingTag);
+            }
+          }
+        });
+
+        shipSh.getRange(2, 1, shipData.length, shipSh.getLastColumn()).setValues(shipData);
+        Logger.log('[SHIP_UAE_EG] GRN mode enabled: no ledger posting performed. Rows tagged for waiting GRN where delta > 0.');
+        return {
+          postedOut: 0,
+          postedIn: 0,
+          skippedNotReady: 0,
+          blocked: { missingShipDate: 0, missingArrival: 0, missingWarehouse: 0 },
+          mode: { useGrnReceipts: true }
+        };
+      }
 
       // ===== Inventory_UAE snapshot map for product/variant/last source id (NOT for avg-cost; we derive cost from ledger) =====
       const uaeLastRow = invUaeSh.getLastRow();
@@ -2682,6 +3230,7 @@ function syncShipmentsUaeEgToInventory() {
       const blockedShipDateTag = 'SUEG_BLOCKED_NO_SHIPDATE_V1';
       const blockedArrivalTag = 'SUEG_BLOCKED_NO_ARRIVAL_V1';
       const blockedWhTag = 'SUEG_BLOCKED_NO_UAE_WAREHOUSE_V1';
+      const waitingGrnTag = 'SUEG_WAITING_GRN_V1';
 
       shipData.forEach(function (row, idx) {
         const shipmentId = row[idxShipShipmentId];
@@ -2690,8 +3239,10 @@ function syncShipmentsUaeEgToInventory() {
 
         if (!shipmentId || !sku || !qtyOriginal) return;
 
-        const qtySynced = Number(row[idxShipQtySynced] || 0);
-        const delta = qtyOriginal - qtySynced;
+        const qtySyncedOut = (idxShipQtyOutSynced != null)
+          ? Number(row[idxShipQtyOutSynced] || 0)
+          : Number(row[idxShipQtySynced] || 0);
+        const delta = qtyOriginal - qtySyncedOut;
 
         if (delta <= 0) return;
 
@@ -2699,8 +3250,8 @@ function syncShipmentsUaeEgToInventory() {
 
         // Deterministic dates (no new Date() fallback in txn-id path)
         const shipDate = toValidDate_(row[idxShipShipDate]);
-        const arrDate = toValidDate_(row[idxShipArrival]);
-        if (!shipDate || !arrDate) {
+        const arrDate = (idxShipArrival != null) ? toValidDate_(row[idxShipArrival]) : null;
+        if (!shipDate || (!useGrnReceipts && !arrDate)) {
           notReadyCount++;
           if (!shipDate) {
             missingShipDateCount++;
@@ -2708,10 +3259,10 @@ function syncShipmentsUaeEgToInventory() {
           } else if (idxShipNotes != null) {
             removeTag_(row, idxShipNotes, blockedShipDateTag);
           }
-          if (!arrDate) {
+          if (!useGrnReceipts && !arrDate) {
             missingArrivalCount++;
             if (idxShipNotes != null) addTag_(row, idxShipNotes, blockedArrivalTag);
-          } else if (idxShipNotes != null) {
+          } else if (!useGrnReceipts && idxShipNotes != null) {
             removeTag_(row, idxShipNotes, blockedArrivalTag);
           }
           return;
@@ -2719,6 +3270,13 @@ function syncShipmentsUaeEgToInventory() {
         if (idxShipNotes != null) {
           removeTag_(row, idxShipNotes, blockedShipDateTag);
           removeTag_(row, idxShipNotes, blockedArrivalTag);
+        }
+
+        if (useGrnReceipts && idxShipNotes != null) {
+          if (delta > 0) addTag_(row, idxShipNotes, waitingGrnTag);
+          else removeTag_(row, idxShipNotes, waitingGrnTag);
+        } else if (idxShipNotes != null) {
+          removeTag_(row, idxShipNotes, waitingGrnTag);
         }
 
         // Line discriminator: SKU can repeat within the same Shipment ID (across boxes/rows)
@@ -2749,12 +3307,15 @@ function syncShipmentsUaeEgToInventory() {
         const stableLineKey = `SUEG|${shipmentId}|${lineDiscriminator}|${sku}|${vKey}`;
 
         // Operation key encodes the pre-sync Qty Synced and the delta, so retries don't duplicate.
-        const baseKey = `${stableLineKey}|S${qtySynced}|D${delta}`;
+        const baseKey = `${stableLineKey}|S${qtySyncedOut}|D${delta}`;
         const sourceIdOut = `${baseKey}|OUT`;
         const sourceIdIn = `${baseKey}|IN`;
 
         let outExists = existingSourceIds.has(sourceIdOut);
         let inExists = existingSourceIds.has(sourceIdIn);
+
+        // Current courier label (may be blank if column is missing).
+        let courierLabel = (idxShipCourier != null) ? String(row[idxShipCourier] || '').trim() : '';
 
         // ===== Determine UAE warehouse for OUT =====
         let fromWarehouse = resolveUaeWarehouseStrict_(idxShipWhUae != null ? row[idxShipWhUae] : '', idxShipCourier != null ? row[idxShipCourier] : '');
@@ -2970,7 +3531,7 @@ function syncShipmentsUaeEgToInventory() {
         }
 
         // ===== IN to EG at landed cost =====
-        if (!inExists) {
+        if (!useGrnReceipts && !inExists) {
           txns.push({
             txnId: inTxnId || undefined,
             type: 'IN',
@@ -3003,26 +3564,28 @@ function syncShipmentsUaeEgToInventory() {
         }
 
         // Update Qty Synced (safe even if txns already existed)
-        row[idxShipQtySynced] = qtyOriginal;
+        if (idxShipQtyOutSynced != null) {
+          row[idxShipQtyOutSynced] = qtySyncedOut + delta;
+        }
+        if (!useGrnReceipts && idxShipQtySynced != null) {
+          row[idxShipQtySynced] = qtyOriginal;
+        } else if (useGrnReceipts && idxShipQtySynced != null && idxShipQtyOutSynced == null) {
+          // Fallback only when dedicated OUT column is missing.
+          row[idxShipQtySynced] = qtySyncedOut + delta;
+        }
       });
 
-      // Rate-limit noisy logs for rows that are not ready yet (missing Ship Date / Actual Arrival).
+      // Rate-limit info log for not-ready rows (no ErrorLog churn).
       if (notReadyCount) {
         try {
           const dp = PropertiesService.getDocumentProperties();
-          const rlKey = 'CocoERP_RL_syncShipUaeEgToInventory_notReady_v1';
+          const rlKey = 'CocoERP_RL_syncShipUaeEgToInventory_notReady_v2';
           const now = Date.now();
           const last = Number(dp.getProperty(rlKey) || 0);
           const windowMs = 6 * 60 * 60 * 1000;
           if (!last || (now - last) > windowMs) {
-            logError_(
-              'syncShipmentsUaeEgToInventory.notReady',
-              new Error('Shipments_UAE_EG rows skipped because Ship Date and/or Actual Arrival is missing.'),
-              { count: notReadyCount, missingShipDate: missingShipDateCount, missingArrival: missingArrivalCount }
-            );
+            Logger.log('[SHIP_UAE_EG] Not-ready rows skipped (Ship Date/Arrival/UAE warehouse). total=' + notReadyCount + ', shipDate=' + missingShipDateCount + ', arrival=' + missingArrivalCount + ', warehouse=' + missingWarehouseCount + ', mode_GRN=' + useGrnReceipts);
             dp.setProperty(rlKey, String(now));
-          } else {
-            Logger.log('[SHIP_UAE_EG] Skipped not-ready rows (missing Ship Date/Arrival): ' + notReadyCount);
           }
         } catch (e) { }
       }
@@ -3070,15 +3633,30 @@ function syncShipmentsUaeEgToInventory() {
       if (typeof rebuildInventoryUAEFromLedger === 'function') rebuildInventoryUAEFromLedger();
       if (typeof rebuildInventoryEGFromLedger === 'function') rebuildInventoryEGFromLedger();
 
+      const result = {
+        postedOut: outCount,
+        postedIn: inCount,
+        skippedNotReady: notReadyCount,
+        blocked: {
+          missingShipDate: missingShipDateCount,
+          missingArrival: missingArrivalCount,
+          missingWarehouse: missingWarehouseCount
+        },
+        mode: { useGrnReceipts: useGrnReceipts }
+      };
+
       if (typeof safeAlert_ === 'function') {
         safeAlert_(
           'Sync Shipments_UAE_EG → Inventory done.\n' +
           'New OUT txns: ' + outCount + '\n' +
-          'New IN txns: ' + inCount
+          'New IN txns: ' + inCount + '\n' +
+          'Skipped not-ready: ' + notReadyCount
         );
       } else {
-        Logger.log('Sync Shipments_UAE_EG → Inventory done. OUT=' + outCount + ', IN=' + inCount);
+        Logger.log('Sync Shipments_UAE_EG → Inventory done. OUT=' + outCount + ', IN=' + inCount + ', skipped=' + notReadyCount);
       }
+
+      return result;
     };
 
     if (typeof withLock_ === 'function') {
